@@ -1,0 +1,19 @@
+<Project>
+  <Import Project="../Directory.Build.props"/>
+  <PropertyGroup>
+    <IsPackable>true</IsPackable>
+    <Version>1.0.0</Version>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <Authors>duskembayev</Authors>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <RepositoryUrl>https://github.com/duskembayev/Enhanced.Testing.Component</RepositoryUrl>
+    <PackageProjectUrl>https://github.com/duskembayev/Enhanced.Testing.Component</PackageProjectUrl>
+    <PackageTags>component testing, asp.net, harness</PackageTags>
+    <PackageIcon>icons/icon.png</PackageIcon>
+    <PackageDescription>Enhanced.Testing.Component is a NuGet package that provides a set of tools for component testing ASP.NET Core applications.</PackageDescription>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="$(MSBuildThisFileDirectory)..\images\icon.png" Pack="true" PackagePath="icons"/>
+  </ItemGroup>
+</Project>

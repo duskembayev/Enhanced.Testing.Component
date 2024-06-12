@@ -1,0 +1,31 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{8B5CCDCC-F6D9-4C36-B217-221165D81EE8}"
+	ProjectSection(SolutionItems) = preProject
+		src\Directory.Build.props = src\Directory.Build.props
+	EndProjectSection
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Enhanced.Testing.Component", "src\Enhanced.Testing.Component\Enhanced.Testing.Component.csproj", "{C0BDC29B-7435-4C9B-BC32-225F13CABC5E}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Enhanced.Testing.Component.GrpcClient", "src\Enhanced.Testing.Component.GrpcClient\Enhanced.Testing.Component.GrpcClient.csproj", "{25CB5162-E316-4FDB-9531-DA763F8D0A47}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{C0BDC29B-7435-4C9B-BC32-225F13CABC5E} = {8B5CCDCC-F6D9-4C36-B217-221165D81EE8}
+		{25CB5162-E316-4FDB-9531-DA763F8D0A47} = {8B5CCDCC-F6D9-4C36-B217-221165D81EE8}
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{C0BDC29B-7435-4C9B-BC32-225F13CABC5E}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{C0BDC29B-7435-4C9B-BC32-225F13CABC5E}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{C0BDC29B-7435-4C9B-BC32-225F13CABC5E}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{C0BDC29B-7435-4C9B-BC32-225F13CABC5E}.Release|Any CPU.Build.0 = Release|Any CPU
+		{25CB5162-E316-4FDB-9531-DA763F8D0A47}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{25CB5162-E316-4FDB-9531-DA763F8D0A47}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{25CB5162-E316-4FDB-9531-DA763F8D0A47}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{25CB5162-E316-4FDB-9531-DA763F8D0A47}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+EndGlobal
