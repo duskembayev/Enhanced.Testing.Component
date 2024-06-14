@@ -1,3 +1,5 @@
+using Microsoft.EntityFrameworkCore;
+
 namespace SampleService.Tests;
 
 public class SampleTests(SampleServiceFixture fixture) : IClassFixture<SampleServiceFixture>
@@ -20,8 +22,21 @@ public class SampleTests(SampleServiceFixture fixture) : IClassFixture<SampleSer
     {
         var client = fixture.GrpcClient.CreateClient<Greeter.GreeterClient>();
 
-        var reply = await client.SayHelloAsync(new HelloRequest { Name = "World" });
+        var reply = await client.SayHelloAsync(new HelloRequest { Name = "John" });
 
-        Assert.Equal("Hello World", reply.Message);
+        Assert.Equal("Hello John", reply.Message);
+    }
+
+    [Fact]
+    public async Task ShouldStorePerson()
+    {
+        var client = fixture.GrpcClient.CreateClient<Greeter.GreeterClient>();
+
+        await client.SayHelloAsync(new HelloRequest { Name = "Kelly" });
+
+        var exists = await fixture.PeopleDb.ExecuteAsync(async dbContext
+            => await dbContext.Persons.AnyAsync(p => p.Name == "Kelly"));
+
+        Assert.True(exists);
     }
 }

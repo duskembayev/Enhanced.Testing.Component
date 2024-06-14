@@ -1,0 +1,15 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFramework>net8.0</TargetFramework>
+    </PropertyGroup>
+
+    <ItemGroup>
+      <ProjectReference Include="..\Enhanced.Testing.Component\Enhanced.Testing.Component.csproj" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <PackageReference Include="Testcontainers.PostgreSql" Version="3.8.0" />
+    </ItemGroup>
+
+</Project>

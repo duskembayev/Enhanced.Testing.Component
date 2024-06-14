@@ -1,9 +1,17 @@
+using Microsoft.EntityFrameworkCore;
+using SampleService.Models;
 using SampleService.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddGrpc();
 builder.Services.AddHealthChecks();
+
+builder.Services.AddDbContext<PeopleDbContext>(options =>
+{
+    var connectionString = builder.Configuration.GetConnectionString(PeopleDbContext.ConnectionStringName);
+    options.UseNpgsql(connectionString);
+});
 
 var app = builder.Build();
 

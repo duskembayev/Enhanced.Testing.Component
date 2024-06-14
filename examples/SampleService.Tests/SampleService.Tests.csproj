@@ -25,7 +25,9 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\..\src\Enhanced.Testing.Component.DbContext\Enhanced.Testing.Component.DbContext.csproj" />
     <ProjectReference Include="..\..\src\Enhanced.Testing.Component.GrpcClient\Enhanced.Testing.Component.GrpcClient.csproj"/>
+    <ProjectReference Include="..\..\src\Enhanced.Testing.Component.PostgreSql\Enhanced.Testing.Component.PostgreSql.csproj" />
     <ProjectReference Include="..\..\src\Enhanced.Testing.Component\Enhanced.Testing.Component.csproj"/>
     <ProjectReference Include="..\SampleService\SampleService.csproj"/>
   </ItemGroup>
