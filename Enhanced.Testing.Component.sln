@@ -3,6 +3,7 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{8B5CCDCC-F6D9-4C36-B217-221165D81EE8}"
 	ProjectSection(SolutionItems) = preProject
 		src\Directory.Build.props = src\Directory.Build.props
+		src\.editorconfig = src\.editorconfig
 	EndProjectSection
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Enhanced.Testing.Component", "src\Enhanced.Testing.Component\Enhanced.Testing.Component.csproj", "{C0BDC29B-7435-4C9B-BC32-225F13CABC5E}"
@@ -19,6 +20,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Enhanced.Testing.Component.
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Enhanced.Testing.Component.PostgreSql", "src\Enhanced.Testing.Component.PostgreSql\Enhanced.Testing.Component.PostgreSql.csproj", "{4D0BA942-2908-4173-B276-B8294194D1CF}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Enhanced.Testing.Component.Kafka", "src\Enhanced.Testing.Component.Kafka\Enhanced.Testing.Component.Kafka.csproj", "{DA6F6445-B8FB-4D3E-8226-69371932BFB8}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -31,6 +34,7 @@ Global
 		{DC344617-8AF3-4A0B-A4DB-F29B8FDB0E6F} = {E074275C-95F8-4C99-8F80-4A688866535F}
 		{11EE9253-65C0-4FE5-8A84-119CB6DF2777} = {8B5CCDCC-F6D9-4C36-B217-221165D81EE8}
 		{4D0BA942-2908-4173-B276-B8294194D1CF} = {8B5CCDCC-F6D9-4C36-B217-221165D81EE8}
+		{DA6F6445-B8FB-4D3E-8226-69371932BFB8} = {8B5CCDCC-F6D9-4C36-B217-221165D81EE8}
 	EndGlobalSection
 	GlobalSection(ProjectConfigurationPlatforms) = postSolution
 		{C0BDC29B-7435-4C9B-BC32-225F13CABC5E}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
@@ -57,5 +61,9 @@ Global
 		{4D0BA942-2908-4173-B276-B8294194D1CF}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{4D0BA942-2908-4173-B276-B8294194D1CF}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{4D0BA942-2908-4173-B276-B8294194D1CF}.Release|Any CPU.Build.0 = Release|Any CPU
+		{DA6F6445-B8FB-4D3E-8226-69371932BFB8}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{DA6F6445-B8FB-4D3E-8226-69371932BFB8}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{DA6F6445-B8FB-4D3E-8226-69371932BFB8}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{DA6F6445-B8FB-4D3E-8226-69371932BFB8}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 EndGlobal
