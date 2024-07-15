@@ -1,4 +1,4 @@
-﻿using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.Configuration;
 using Testcontainers.PostgreSql;
 
@@ -92,7 +92,7 @@ public class PostgreSqlHarness : Harness
                      .WithDatabase(Database)
                      .Build();
 
-        await _container.StartAsync(cancellationToken);
+        await _container.StartAsync(cancellationToken).ConfigureAwait(false);
     }
 
     /// <inheritdoc />
@@ -100,7 +100,7 @@ public class PostgreSqlHarness : Harness
     {
         if (_container is not null)
         {
-            await _container.StopAsync(cancellationToken);
+            await _container.StopAsync(cancellationToken).ConfigureAwait(false);
         }
     }
 }

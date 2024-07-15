@@ -40,7 +40,7 @@ public class GrpcClientHarness : Harness
     {
         foreach (var channel in _channels.Values)
         {
-            await channel.ShutdownAsync();
+            await channel.ShutdownAsync().ConfigureAwait(false);
             channel.Dispose();
         }
 

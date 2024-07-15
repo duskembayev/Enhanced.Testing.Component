@@ -1,4 +1,4 @@
-﻿using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Enhanced.Testing.Component.DbContext;
 
@@ -33,9 +33,13 @@ public class DbContextHarness<TContext> : Harness where TContext : Microsoft.Ent
     {
         ThrowIfComponentNotStarted();
 
-        await using var serviceScope = Component.Services.CreateAsyncScope();
-        await using var context = serviceScope.ServiceProvider.GetRequiredService<TContext>();
-        await action(context);
+        var scope = Component.Services.CreateAsyncScope();
+
+        await using (scope.ConfigureAwait(false))
+        {
+            var context = scope.ServiceProvider.GetRequiredService<TContext>();
+            await action(context).ConfigureAwait(false);
+        }
     }
 
     /// <summary>
@@ -57,9 +61,13 @@ public class DbContextHarness<TContext> : Harness where TContext : Microsoft.Ent
     {
         ThrowIfComponentNotStarted();
 
-        await using var serviceScope = Component.Services.CreateAsyncScope();
-        await using var context = serviceScope.ServiceProvider.GetRequiredService<TContext>();
-        return await action(context);
+        var scope = Component.Services.CreateAsyncScope();
+
+        await using (scope.ConfigureAwait(false))
+        {
+            var context = scope.ServiceProvider.GetRequiredService<TContext>();
+            return await action(context).ConfigureAwait(false);
+        }
     }
 
     /// <summary>
@@ -106,8 +114,9 @@ public class DbContextHarness<TContext> : Harness where TContext : Microsoft.Ent
             return;
         }
 
-        await ExecuteAsync(async context => await context.Database.EnsureCreatedAsync(cancellationToken),
-            cancellationToken);
+        await ExecuteAsync(
+            async context => await context.Database.EnsureCreatedAsync(cancellationToken).ConfigureAwait(false),
+            cancellationToken).ConfigureAwait(false);
     }
 
     /// <inheritdoc />
@@ -118,7 +127,8 @@ public class DbContextHarness<TContext> : Harness where TContext : Microsoft.Ent
             return;
         }
 
-        await ExecuteAsync(async context => await context.Database.EnsureDeletedAsync(cancellationToken),
-            cancellationToken);
+        await ExecuteAsync(
+            async context => await context.Database.EnsureDeletedAsync(cancellationToken).ConfigureAwait(false),
+            cancellationToken).ConfigureAwait(false);
     }
 }

@@ -28,7 +28,7 @@ internal sealed class Component<TEntryPoint> : IComponent where TEntryPoint : cl
     {
         for (var i = 0; i < _dependencies.Count; i++)
         {
-            await _dependencies[i].OnStartAsync(this, cancellationToken);
+            await _dependencies[i].OnStartAsync(this, cancellationToken).ConfigureAwait(false);
         }
 
         _ = _appFactory.Server;
@@ -38,9 +38,9 @@ internal sealed class Component<TEntryPoint> : IComponent where TEntryPoint : cl
     {
         for (var i = _dependencies.Count - 1; i >= 0; i--)
         {
-            await _dependencies[i].OnStopAsync(this, cancellationToken);
+            await _dependencies[i].OnStopAsync(this, cancellationToken).ConfigureAwait(false);
         }
 
-        await _appFactory.DisposeAsync();
+        await _appFactory.DisposeAsync().ConfigureAwait(false);
     }
 }
