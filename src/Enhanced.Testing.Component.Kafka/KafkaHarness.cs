@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.Configuration;
 using Testcontainers.Kafka;
@@ -37,9 +38,9 @@ public class KafkaHarness : Harness
     ///     Returns the broker address.
     /// </summary>
     /// <returns></returns>
-    public string GetBootstrapAddress()
+    public string GetBootstrapServer()
     {
-        return Container.GetBootstrapAddress();
+        return $"{Container.Hostname}:{Container.GetMappedPublicPort(KafkaBuilder.KafkaPort)}";
     }
 
     /// <inheritdoc />
@@ -54,7 +55,7 @@ public class KafkaHarness : Harness
             builder => builder.AddInMemoryCollection(
                 new Dictionary<string, string?>
                 {
-                    ["ConnectionStrings:" + ConnectionStringName] = GetBootstrapAddress()
+                    ["ConnectionStrings:" + ConnectionStringName] = GetBootstrapServer()
                 }));
     }
 
@@ -84,17 +85,16 @@ public class KafkaHarness : Harness
     /// </returns>
     public async Task<bool> CreateTopicAsync(string topicName, CancellationToken cancellationToken = default)
     {
-        string[] command =
-        [
-            "kafka-topics",
-            $"--bootstrap-server localhost:{KafkaBuilder.BrokerPort}",
-            $"--topic {topicName}",
-            "--create",
-            "--partitions 1",
-            "--replication-factor 1"
-        ];
+        string[] cmd = ["kafka-topics", "--create", "--bootstrap-server", "127.0.0.1:9093", "--topic", topicName];
+        var result = await Container.ExecAsync(cmd, cancellationToken).ConfigureAwait(false);
 
-        var result = await Container.ExecAsync(command, cancellationToken).ConfigureAwait(false);
+        if (result.ExitCode != 0)
+        {
+            Debug.Fail($"Failed to create topic {topicName}: {result.Stderr}");
+            return false;
+        }
+
+        Debug.WriteLine(result.Stdout);
         return result.ExitCode == 0;
     }
 

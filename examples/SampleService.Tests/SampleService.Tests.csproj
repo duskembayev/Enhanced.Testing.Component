@@ -17,19 +17,20 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Using Include="Xunit"/>
+    <Using Include="Xunit" />
   </ItemGroup>
 
   <ItemGroup>
-    <Protobuf Include="..\SampleService\Protos\greet.proto" GrpcServices="Client"/>
+    <Protobuf Include="..\SampleService\Protos\greet.proto" GrpcServices="Client" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\Enhanced.Testing.Component.DbContext\Enhanced.Testing.Component.DbContext.csproj" />
-    <ProjectReference Include="..\..\src\Enhanced.Testing.Component.GrpcClient\Enhanced.Testing.Component.GrpcClient.csproj"/>
+    <ProjectReference Include="..\..\src\Enhanced.Testing.Component.GrpcClient\Enhanced.Testing.Component.GrpcClient.csproj" />
+    <ProjectReference Include="..\..\src\Enhanced.Testing.Component.Kafka\Enhanced.Testing.Component.Kafka.csproj" />
     <ProjectReference Include="..\..\src\Enhanced.Testing.Component.PostgreSql\Enhanced.Testing.Component.PostgreSql.csproj" />
-    <ProjectReference Include="..\..\src\Enhanced.Testing.Component\Enhanced.Testing.Component.csproj"/>
-    <ProjectReference Include="..\SampleService\SampleService.csproj"/>
+    <ProjectReference Include="..\..\src\Enhanced.Testing.Component\Enhanced.Testing.Component.csproj" />
+    <ProjectReference Include="..\SampleService\SampleService.csproj" />
   </ItemGroup>
 
 </Project>
