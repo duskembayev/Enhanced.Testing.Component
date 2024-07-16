@@ -14,27 +14,27 @@ public class PostgreSqlHarness : Harness
     /// <summary>
     ///     The username to use when connecting to the PostgreSQL database.
     /// </summary>
-    public string Username { get; set; } = PostgreSqlBuilder.DefaultUsername;
+    public string Username { get; init; } = PostgreSqlBuilder.DefaultUsername;
 
     /// <summary>
     ///     The password to use when connecting to the PostgreSQL database.
     /// </summary>
-    public string Password { get; set; } = PostgreSqlBuilder.DefaultPassword;
+    public string Password { get; init; } = PostgreSqlBuilder.DefaultPassword;
 
     /// <summary>
     ///     The database to use when connecting to the PostgreSQL database.
     /// </summary>
-    public string Database { get; set; } = PostgreSqlBuilder.DefaultDatabase;
+    public string Database { get; init; } = PostgreSqlBuilder.DefaultDatabase;
 
     /// <summary>
     ///     The name of the connection string to add to the configuration.
     /// </summary>
-    public string? ConnectionStringName { get; set; }
+    public string? ConnectionStringName { get; init; }
 
     /// <summary>
     ///     The connection string properties.
     /// </summary>
-    public IDictionary<string, string> ConnectionStringProperties { get; set; } = new Dictionary<string, string>();
+    public IDictionary<string, string> ConnectionStringProperties { get; init; } = new Dictionary<string, string>();
 
     /// <summary>
     ///     The PostgreSQL container.

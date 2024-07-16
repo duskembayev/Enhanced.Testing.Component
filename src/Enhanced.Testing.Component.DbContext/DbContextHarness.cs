@@ -13,12 +13,12 @@ public class DbContextHarness<TContext> : Harness where TContext : Microsoft.Ent
     /// <summary>
     ///     Ensures that the database for the context exists on start.
     /// </summary>
-    public bool EnsureCreated { get; set; }
+    public bool EnsureCreated { get; init; }
 
     /// <summary>
     ///     Ensures that the database for the context does not exist on stop.
     /// </summary>
-    public bool EnsureDeleted { get; set; }
+    public bool EnsureDeleted { get; init; }
 
     /// <summary>
     ///     Executes the specified action on the DbContext.

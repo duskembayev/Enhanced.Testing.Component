@@ -15,7 +15,7 @@ public class KafkaHarness : Harness
     /// <summary>
     ///     The topics to create.
     /// </summary>
-    public IList<string> Topics { get; set; } = [];
+    public IList<string> Topics { get; init; } = [];
 
     /// <summary>
     ///     The Kafka container.
@@ -32,7 +32,7 @@ public class KafkaHarness : Harness
     /// <summary>
     ///     The name of the connection string to add to the configuration.
     /// </summary>
-    public string? ConnectionStringName { get; set; }
+    public string? ConnectionStringName { get; init; }
 
     /// <summary>
     ///     Returns the broker address.
