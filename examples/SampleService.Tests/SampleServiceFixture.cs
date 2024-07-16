@@ -3,6 +3,7 @@ using Enhanced.Testing.Component.DbContext;
 using Enhanced.Testing.Component.GrpcClient;
 using Enhanced.Testing.Component.Kafka;
 using Enhanced.Testing.Component.PostgreSql;
+using Enhanced.Testing.Component.Redis;
 using SampleService.Models;
 using SampleService.Services;
 
@@ -21,6 +22,10 @@ public class SampleServiceFixture : IAsyncLifetime
             Topics = [GreeterService.KafkaTopic],
             ConnectionStringName = GreeterService.KafkaConnectionStringName
         };
+        Redis = new RedisHarness
+        {
+            ConnectionStringName = GreeterService.RedisConnectionStringName
+        };
         PostgreSql = new PostgreSqlHarness()
         {
             ConnectionStringName = PeopleDbContext.ConnectionStringName,
@@ -35,6 +40,7 @@ public class SampleServiceFixture : IAsyncLifetime
                                      .AddHarness(GrpcClient)
                                      .AddHarness(PostgreSql)
                                      .AddHarness(Kafka)
+                                     .AddHarness(Redis)
                                      .AddHarness(PeopleDb)
                                      .Build();
     }
@@ -46,6 +52,8 @@ public class SampleServiceFixture : IAsyncLifetime
     public PostgreSqlHarness PostgreSql { get; }
 
     public KafkaHarness Kafka { get; }
+
+    public RedisHarness Redis { get; }
 
     public DbContextHarness<PeopleDbContext> PeopleDb { get; }
 
