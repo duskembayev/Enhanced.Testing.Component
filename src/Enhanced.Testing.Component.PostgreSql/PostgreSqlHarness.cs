@@ -1,5 +1,3 @@
-using Microsoft.AspNetCore.Hosting;
-using Microsoft.Extensions.Configuration;
 using Testcontainers.PostgreSql;
 
 namespace Enhanced.Testing.Component.PostgreSql;
@@ -7,10 +5,8 @@ namespace Enhanced.Testing.Component.PostgreSql;
 /// <summary>
 ///     A PostgreSQL harness.
 /// </summary>
-public class PostgreSqlHarness : Harness
+public class PostgreSqlHarness : ContainerHarness<PostgreSqlContainer>
 {
-    private PostgreSqlContainer? _container;
-
     /// <summary>
     ///     The username to use when connecting to the PostgreSQL database.
     /// </summary>
@@ -27,36 +23,14 @@ public class PostgreSqlHarness : Harness
     public string Database { get; init; } = PostgreSqlBuilder.DefaultDatabase;
 
     /// <summary>
-    ///     The name of the connection string to add to the configuration.
-    /// </summary>
-    public string? ConnectionStringName { get; init; }
-
-    /// <summary>
     ///     The connection string properties.
     /// </summary>
-    public IDictionary<string, string> ConnectionStringProperties { get; init; } = new Dictionary<string, string>();
+    public IDictionary<string, string> ConnectionProperties { get; init; } = new Dictionary<string, string>();
 
-    /// <summary>
-    ///     The PostgreSQL container.
-    /// </summary>
-    public PostgreSqlContainer Container
+    /// <inheritdoc />
+    public override string GetConnectionString()
     {
-        get
-        {
-            ThrowIfComponentNotStarted();
-            return _container!;
-        }
-    }
-
-    /// <summary>
-    ///     Gets the connection string for the PostgreSQL database.
-    /// </summary>
-    /// <returns>
-    ///     The connection string.
-    /// </returns>
-    public string GetConnectionString()
-    {
-        var properties = new Dictionary<string, string>(ConnectionStringProperties)
+        var properties = new Dictionary<string, string>(ConnectionProperties)
         {
             ["Host"] = Container.Hostname,
             ["Port"] = Container.GetMappedPublicPort(PostgreSqlBuilder.PostgreSqlPort).ToString(),
@@ -68,39 +42,10 @@ public class PostgreSqlHarness : Harness
     }
 
     /// <inheritdoc />
-    public override void OnConfigure(IWebHostBuilder webHostBuilder)
-    {
-        if (ConnectionStringName is null)
-        {
-            return;
-        }
-
-        webHostBuilder.ConfigureAppConfiguration(
-            builder => builder.AddInMemoryCollection(
-                new Dictionary<string, string?>
-                {
-                    ["ConnectionStrings:" + ConnectionStringName] = GetConnectionString()
-                }));
-    }
-
-    /// <inheritdoc />
-    protected override async Task OnStart(CancellationToken cancellationToken)
-    {
-        _container = new PostgreSqlBuilder()
-                     .WithUsername(Username)
-                     .WithPassword(Password)
-                     .WithDatabase(Database)
-                     .Build();
-
-        await _container.StartAsync(cancellationToken).ConfigureAwait(false);
-    }
-
-    /// <inheritdoc />
-    protected override async Task OnStop(CancellationToken cancellationToken)
-    {
-        if (_container is not null)
-        {
-            await _container.StopAsync(cancellationToken).ConfigureAwait(false);
-        }
-    }
+    protected override PostgreSqlContainer OnCreateContainer() =>
+        new PostgreSqlBuilder()
+            .WithUsername(Username)
+            .WithPassword(Password)
+            .WithDatabase(Database)
+            .Build();
 }

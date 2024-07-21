@@ -1,6 +1,4 @@
 using System.Diagnostics;
-using Microsoft.AspNetCore.Hosting;
-using Microsoft.Extensions.Configuration;
 using Testcontainers.Kafka;
 
 namespace Enhanced.Testing.Component.Kafka;
@@ -8,67 +6,34 @@ namespace Enhanced.Testing.Component.Kafka;
 /// <summary>
 ///     A Kafka harness.
 /// </summary>
-public class KafkaHarness : Harness
+public class KafkaHarness : ContainerHarness<KafkaContainer>
 {
-    private KafkaContainer? _container;
-
     /// <summary>
     ///     The topics to create.
     /// </summary>
     public IList<string> Topics { get; init; } = [];
 
-    /// <summary>
-    ///     The Kafka container.
-    /// </summary>
-    public KafkaContainer Container
-    {
-        get
-        {
-            ThrowIfComponentNotStarted();
-            return _container!;
-        }
-    }
-
-    /// <summary>
-    ///     The name of the connection string to add to the configuration.
-    /// </summary>
-    public string? ConnectionStringName { get; init; }
-
-    /// <summary>
-    ///     Returns the broker address.
-    /// </summary>
-    /// <returns></returns>
-    public string GetBootstrapServer()
-    {
-        return $"{Container.Hostname}:{Container.GetMappedPublicPort(KafkaBuilder.KafkaPort)}";
-    }
-
-    /// <inheritdoc />
-    public override void OnConfigure(IWebHostBuilder webHostBuilder)
-    {
-        if (ConnectionStringName is null)
-        {
-            return;
-        }
-
-        webHostBuilder.ConfigureAppConfiguration(
-            builder => builder.AddInMemoryCollection(
-                new Dictionary<string, string?>
-                {
-                    ["ConnectionStrings:" + ConnectionStringName] = GetBootstrapServer()
-                }));
-    }
-
     /// <inheritdoc />
     protected override async Task OnStart(CancellationToken cancellationToken)
     {
-        _container = new KafkaBuilder().Build();
-        await _container.StartAsync(cancellationToken).ConfigureAwait(false);
+        await base.OnStart(cancellationToken).ConfigureAwait(false);
 
         foreach (var topic in Topics)
         {
             await CreateTopicAsync(topic, cancellationToken).ConfigureAwait(false);
         }
+    }
+
+    /// <inheritdoc />
+    public override string GetConnectionString()
+    {
+        return $"{Container.Hostname}:{Container.GetMappedPublicPort(KafkaBuilder.KafkaPort)}";
+    }
+
+    /// <inheritdoc />
+    protected override KafkaContainer OnCreateContainer()
+    {
+        return new KafkaBuilder().Build();
     }
 
     /// <summary>
@@ -96,14 +61,5 @@ public class KafkaHarness : Harness
 
         Debug.WriteLine(result.Stdout);
         return result.ExitCode == 0;
-    }
-
-    /// <inheritdoc />
-    protected override async Task OnStop(CancellationToken cancellationToken)
-    {
-        if (_container is not null)
-        {
-            await _container.StopAsync(cancellationToken).ConfigureAwait(false);
-        }
     }
 }

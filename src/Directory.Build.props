@@ -2,7 +2,7 @@
   <Import Project="../Directory.Build.props"/>
   <PropertyGroup>
     <IsPackable>true</IsPackable>
-    <Version>1.0.1</Version>
+    <Version>1.1.0</Version>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <Authors>duskembayev</Authors>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
@@ -10,10 +10,12 @@
     <PackageProjectUrl>https://github.com/duskembayev/Enhanced.Testing.Component</PackageProjectUrl>
     <PackageTags>component testing, asp.net, harness</PackageTags>
     <PackageIcon>icons/icon.png</PackageIcon>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
     <PackageDescription>Enhanced.Testing.Component is a NuGet package that provides a set of tools for component testing ASP.NET Core applications.</PackageDescription>
   </PropertyGroup>
 
   <ItemGroup>
     <None Include="$(MSBuildThisFileDirectory)..\images\icon.png" Pack="true" PackagePath="icons"/>
+    <None Include="$(MSBuildThisFileDirectory)..\README.md" Pack="true" PackagePath="\"/>
   </ItemGroup>
 </Project>

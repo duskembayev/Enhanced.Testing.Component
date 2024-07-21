@@ -20,15 +20,15 @@ public class SampleServiceFixture : IAsyncLifetime
         Kafka = new KafkaHarness
         {
             Topics = [GreeterService.KafkaTopic],
-            ConnectionStringName = GreeterService.KafkaConnectionStringName
+            ConnectionName = GreeterService.KafkaConnectionStringName
         };
-        Redis = new RedisHarness
+        Redis = new RedisStackHarness
         {
-            ConnectionStringName = GreeterService.RedisConnectionStringName
+            ConnectionName = GreeterService.RedisConnectionStringName
         };
         PostgreSql = new PostgreSqlHarness()
         {
-            ConnectionStringName = PeopleDbContext.ConnectionStringName,
+            ConnectionName = PeopleDbContext.ConnectionStringName,
         };
         PeopleDb = new DbContextHarness<PeopleDbContext>
         {
@@ -53,7 +53,7 @@ public class SampleServiceFixture : IAsyncLifetime
 
     public KafkaHarness Kafka { get; }
 
-    public RedisHarness Redis { get; }
+    public RedisStackHarness Redis { get; }
 
     public DbContextHarness<PeopleDbContext> PeopleDb { get; }
 
