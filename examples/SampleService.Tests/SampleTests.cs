@@ -1,4 +1,3 @@
-using Confluent.Kafka;
 using Enhanced.Testing.Component.Kafka;
 using Microsoft.EntityFrameworkCore;
 
@@ -56,5 +55,19 @@ public class SampleTests(SampleServiceFixture fixture) : IClassFixture<SampleSer
         Assert.NotNull(message);
         Assert.Equal("Alice", message.Key);
         Assert.Equal("Alice", message.Value);
+    }
+
+    [Fact]
+    public async Task ShouldStorePersonInRedis()
+    {
+        var client = fixture.GrpcClient.CreateClient<Greeter.GreeterClient>();
+
+        await client.SayHelloAsync(new HelloRequest { Name = "Leo" });
+        await client.SayHelloAsync(new HelloRequest { Name = "Leo" });
+        await client.SayHelloAsync(new HelloRequest { Name = "Leo" });
+
+        var value = fixture.RedisDatabase.Database.StringGet("Leo");
+
+        Assert.Equal(3, value);
     }
 }

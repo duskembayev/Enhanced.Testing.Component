@@ -19,25 +19,13 @@ public class SampleServiceFixture : IAsyncLifetime
         GrpcClient = new GrpcClientHarness();
         Kafka = new KafkaHarness
         {
-            Topics = [GreeterService.KafkaTopic],
-            ConnectionName = GreeterService.KafkaConnectionStringName
+            Topics = [GreeterService.KafkaTopic], ConnectionName = GreeterService.KafkaConnectionStringName
         };
-        Redis = new RedisStackHarness
-        {
-            ConnectionName = GreeterService.RedisConnectionStringName
-        };
-        PostgreSql = new PostgreSqlHarness()
-        {
-            ConnectionName = PeopleDbContext.ConnectionStringName,
-        };
-        PeopleDb = new DbContextHarness<PeopleDbContext>
-        {
-            EnsureCreated = true
-        };
-        PeopleKafkaConsumer = new KafkaConsumerHarness<string, string>(Kafka)
-        {
-            Topic = GreeterService.KafkaTopic
-        };
+        Redis = new RedisStackHarness { ConnectionName = GreeterService.RedisConnectionStringName };
+        PostgreSql = new PostgreSqlHarness() { ConnectionName = PeopleDbContext.ConnectionStringName, };
+        PeopleDb = new DbContextHarness<PeopleDbContext> { EnsureCreated = true };
+        PeopleKafkaConsumer = new KafkaConsumerHarness<string, string>(Kafka) { Topic = GreeterService.KafkaTopic };
+        RedisDatabase = new RedisDatabaseHarness(Redis);
 
         _component = ComponentBuilder.Create<Program>()
                                      .AddHarness(HttpClient)
@@ -47,6 +35,7 @@ public class SampleServiceFixture : IAsyncLifetime
                                      .AddHarness(Redis)
                                      .AddHarness(PeopleDb)
                                      .AddHarness(PeopleKafkaConsumer)
+                                     .AddHarness(RedisDatabase)
                                      .Build();
     }
 
@@ -58,11 +47,13 @@ public class SampleServiceFixture : IAsyncLifetime
 
     public KafkaHarness Kafka { get; }
 
-    public KafkaConsumerHarness<string, string> PeopleKafkaConsumer { get; }
-
     public RedisStackHarness Redis { get; }
 
     public DbContextHarness<PeopleDbContext> PeopleDb { get; }
+
+    public KafkaConsumerHarness<string, string> PeopleKafkaConsumer { get; }
+
+    public RedisDatabaseHarness RedisDatabase { get; }
 
     async Task IAsyncLifetime.InitializeAsync()
     {
