@@ -34,6 +34,10 @@ public class SampleServiceFixture : IAsyncLifetime
         {
             EnsureCreated = true
         };
+        PeopleKafkaConsumer = new KafkaConsumerHarness<string, string>(Kafka)
+        {
+            Topic = GreeterService.KafkaTopic
+        };
 
         _component = ComponentBuilder.Create<Program>()
                                      .AddHarness(HttpClient)
@@ -42,6 +46,7 @@ public class SampleServiceFixture : IAsyncLifetime
                                      .AddHarness(Kafka)
                                      .AddHarness(Redis)
                                      .AddHarness(PeopleDb)
+                                     .AddHarness(PeopleKafkaConsumer)
                                      .Build();
     }
 
@@ -52,6 +57,8 @@ public class SampleServiceFixture : IAsyncLifetime
     public PostgreSqlHarness PostgreSql { get; }
 
     public KafkaHarness Kafka { get; }
+
+    public KafkaConsumerHarness<string, string> PeopleKafkaConsumer { get; }
 
     public RedisStackHarness Redis { get; }
 

@@ -1,3 +1,5 @@
+using Confluent.Kafka;
+using Enhanced.Testing.Component.Kafka;
 using Microsoft.EntityFrameworkCore;
 
 namespace SampleService.Tests;
@@ -38,5 +40,21 @@ public class SampleTests(SampleServiceFixture fixture) : IClassFixture<SampleSer
             => await dbContext.Persons.AnyAsync(p => p.Name == "Kelly"));
 
         Assert.True(exists);
+    }
+
+    [Fact]
+    public async Task ShouldProduceMessage()
+    {
+        fixture.PeopleKafkaConsumer.SeekToEnd();
+
+        var client = fixture.GrpcClient.CreateClient<Greeter.GreeterClient>();
+
+        await client.SayHelloAsync(new HelloRequest { Name = "Alice" });
+
+        var message = fixture.PeopleKafkaConsumer.ConsumeMessage(500);
+
+        Assert.NotNull(message);
+        Assert.Equal("Alice", message.Key);
+        Assert.Equal("Alice", message.Value);
     }
 }
