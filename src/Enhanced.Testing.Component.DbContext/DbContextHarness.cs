@@ -1,3 +1,4 @@
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Enhanced.Testing.Component.DbContext;
@@ -10,15 +11,20 @@ namespace Enhanced.Testing.Component.DbContext;
 /// </typeparam>
 public class DbContextHarness<TContext> : Harness where TContext : Microsoft.EntityFrameworkCore.DbContext
 {
+    private Action<DbContextOptionsBuilder<TContext>>? _configure;
+    private bool _ensureCreated;
+
     /// <summary>
     ///     Ensures that the database for the context exists on start.
     /// </summary>
-    public bool EnsureCreated { get; init; }
-
-    /// <summary>
-    ///     Ensures that the database for the context does not exist on stop.
-    /// </summary>
-    public bool EnsureDeleted { get; init; }
+    /// <param name="configure">
+    ///     The action to configure the DbContextOptionsBuilder.
+    /// </param>
+    public void EnsureCreatedOnStart(Action<DbContextOptionsBuilder<TContext>> configure)
+    {
+        _ensureCreated = true;
+        _configure = configure;
+    }
 
     /// <summary>
     ///     Executes the specified action on the DbContext.
@@ -109,26 +115,32 @@ public class DbContextHarness<TContext> : Harness where TContext : Microsoft.Ent
     /// <inheritdoc />
     protected override async Task OnStart(CancellationToken cancellationToken)
     {
-        if (!EnsureCreated)
+        if (!_ensureCreated)
         {
             return;
         }
 
-        await ExecuteAsync(
-            async context => await context.Database.EnsureCreatedAsync(cancellationToken).ConfigureAwait(false),
-            cancellationToken).ConfigureAwait(false);
+        var context = CreateDbContext();
+
+        await using (context)
+        {
+            await context.Database.EnsureCreatedAsync(cancellationToken).ConfigureAwait(false);
+        }
     }
 
-    /// <inheritdoc />
-    protected override async Task OnStop(CancellationToken cancellationToken)
+    private TContext CreateDbContext()
     {
-        if (!EnsureDeleted)
+        var optionsBuilder = new DbContextOptionsBuilder<TContext>();
+        _configure?.Invoke(optionsBuilder);
+
+        var constructor = typeof(TContext).GetConstructor([typeof(DbContextOptions<TContext>)])
+                          ?? typeof(TContext).GetConstructor([typeof(DbContextOptions)]);
+
+        if (constructor == null)
         {
-            return;
+            throw new InvalidOperationException("No constructor found for DbContext.");
         }
 
-        await ExecuteAsync(
-            async context => await context.Database.EnsureDeletedAsync(cancellationToken).ConfigureAwait(false),
-            cancellationToken).ConfigureAwait(false);
+        return (TContext)constructor.Invoke([optionsBuilder.Options]);
     }
 }

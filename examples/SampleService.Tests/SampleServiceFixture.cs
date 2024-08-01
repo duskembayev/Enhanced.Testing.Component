@@ -4,6 +4,7 @@ using Enhanced.Testing.Component.GrpcClient;
 using Enhanced.Testing.Component.Kafka;
 using Enhanced.Testing.Component.PostgreSql;
 using Enhanced.Testing.Component.Redis;
+using Microsoft.EntityFrameworkCore;
 using SampleService.Models;
 using SampleService.Services;
 
@@ -22,8 +23,9 @@ public class SampleServiceFixture : IAsyncLifetime
             Topics = [GreeterService.KafkaTopic], ConnectionName = GreeterService.KafkaConnectionStringName
         };
         Redis = new RedisStackHarness { ConnectionName = GreeterService.RedisConnectionStringName };
-        PostgreSql = new PostgreSqlHarness() { ConnectionName = PeopleDbContext.ConnectionStringName, };
-        PeopleDb = new DbContextHarness<PeopleDbContext> { EnsureCreated = true };
+        PostgreSql = new PostgreSqlHarness { ConnectionName = PeopleDbContext.ConnectionStringName, };
+        PeopleDb = new DbContextHarness<PeopleDbContext>();
+        PeopleDb.EnsureCreatedOnStart(builder => builder.UseNpgsql(PostgreSql.GetConnectionString()));
         PeopleKafkaConsumer = new KafkaConsumerHarness<string, string>(Kafka) { Topic = GreeterService.KafkaTopic };
         RedisDatabase = new RedisDatabaseHarness(Redis);
 

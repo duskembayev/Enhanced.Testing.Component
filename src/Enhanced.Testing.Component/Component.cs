@@ -4,6 +4,7 @@ internal sealed class Component<TEntryPoint> : IComponent where TEntryPoint : cl
 {
     private readonly WebApplicationFactory<TEntryPoint> _appFactory;
     private readonly IReadOnlyList<IComponentDependency> _dependencies;
+    private bool _started;
 
     public Component(WebApplicationFactory<TEntryPoint> appFactory, IReadOnlyList<IComponentDependency> dependencies)
     {
@@ -11,18 +12,40 @@ internal sealed class Component<TEntryPoint> : IComponent where TEntryPoint : cl
         _dependencies = dependencies;
     }
 
-    public IServiceProvider Services => _appFactory.Services;
     public WebApplicationFactoryClientOptions ClientOptions => _appFactory.ClientOptions;
 
-    public HttpClient CreateClient() => _appFactory.CreateClient();
+    public IServiceProvider Services
+    {
+        get
+        {
+            ThrowIfComponentNotStarted();
+            return _appFactory.Services;
+        }
+    }
 
-    public HttpClient CreateClient(WebApplicationFactoryClientOptions options) => _appFactory.CreateClient(options);
+    public HttpClient CreateClient()
+    {
+        ThrowIfComponentNotStarted();
+        return _appFactory.CreateClient();
+    }
 
-    public HttpClient CreateDefaultClient(params DelegatingHandler[] handlers) =>
-        _appFactory.CreateDefaultClient(handlers);
+    public HttpClient CreateClient(WebApplicationFactoryClientOptions options)
+    {
+        ThrowIfComponentNotStarted();
+        return _appFactory.CreateClient(options);
+    }
 
-    public HttpClient CreateDefaultClient(Uri baseAddress, params DelegatingHandler[] handlers) =>
-        _appFactory.CreateDefaultClient(baseAddress, handlers);
+    public HttpClient CreateDefaultClient(params DelegatingHandler[] handlers)
+    {
+        ThrowIfComponentNotStarted();
+        return _appFactory.CreateDefaultClient(handlers);
+    }
+
+    public HttpClient CreateDefaultClient(Uri baseAddress, params DelegatingHandler[] handlers)
+    {
+        ThrowIfComponentNotStarted();
+        return _appFactory.CreateDefaultClient(baseAddress, handlers);
+    }
 
     public async Task StartAsync(CancellationToken cancellationToken)
     {
@@ -32,6 +55,7 @@ internal sealed class Component<TEntryPoint> : IComponent where TEntryPoint : cl
         }
 
         _ = _appFactory.Server;
+        _started = true;
     }
 
     public async Task StopAsync(CancellationToken cancellationToken)
@@ -42,5 +66,14 @@ internal sealed class Component<TEntryPoint> : IComponent where TEntryPoint : cl
         }
 
         await _appFactory.DisposeAsync().ConfigureAwait(false);
+        _started = false;
+    }
+
+    private void ThrowIfComponentNotStarted()
+    {
+        if (!_started)
+        {
+            throw new InvalidOperationException("The component has not been started.");
+        }
     }
 }
