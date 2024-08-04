@@ -39,9 +39,7 @@ public abstract class ContainerHarness<TContainer> : Harness
             return;
         }
 
-        webHostBuilder.ConfigureAppConfiguration(
-            builder => builder.AddInMemoryCollection(
-                new Dictionary<string, string?> { ["ConnectionStrings:" + ConnectionName] = GetConnectionString() }));
+        webHostBuilder.UseSetting("ConnectionStrings:" + ConnectionName, GetConnectionString());
     }
 
     /// <inheritdoc />
