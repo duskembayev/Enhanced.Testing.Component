@@ -36,11 +36,47 @@ public class KafkaConsumerHarness<TKey, TValue>(KafkaHarness kafkaHarness) : Har
     /// <summary>
     ///     Seek to the specified offset.
     /// </summary>
-    /// <param name="offset"></param>
-    public void Seek(Offset offset)
+    /// <param name="offset">
+    ///     The offset to seek to.
+    /// </param>
+    /// <param name="timeout">
+    ///     The timeout to wait for the operation.
+    /// </param>
+    public void Seek(Offset offset, TimeSpan timeout)
     {
         ThrowIfComponentNotStarted();
-        _consumer!.Seek(new TopicPartitionOffset(Topic, 0, offset));
+
+        var tp = new TopicPartition(Topic, 0);
+        var tpo = new TopicPartitionOffset(tp, offset);
+
+        if (offset == Offset.Beginning)
+        {
+            var queryWatermarkOffsets = _consumer!.QueryWatermarkOffsets(tp, timeout);
+
+            if (queryWatermarkOffsets is null)
+            {
+                throw new InvalidOperationException("Failed to query watermark offsets.");
+            }
+
+            tpo = new TopicPartitionOffset(tp, queryWatermarkOffsets.Low);
+        }
+        else if (offset == Offset.End)
+        {
+            var queryWatermarkOffsets = _consumer!.QueryWatermarkOffsets(tp, timeout);
+
+            if (queryWatermarkOffsets is null)
+            {
+                throw new InvalidOperationException("Failed to query watermark offsets.");
+            }
+
+            tpo = new TopicPartitionOffset(tp, queryWatermarkOffsets.High);
+        }
+        else if (offset.IsSpecial)
+        {
+            throw new NotSupportedException("Offset kind is not supported.");
+        }
+
+        _consumer!.Seek(tpo);
     }
 
     /// <summary>
