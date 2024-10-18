@@ -1,3 +1,5 @@
+using Microsoft.AspNetCore.TestHost;
+
 namespace Enhanced.Testing.Component;
 
 /// <summary>
@@ -5,6 +7,11 @@ namespace Enhanced.Testing.Component;
 /// </summary>
 public interface IComponent
 {
+    /// <summary>
+    ///     The test server.
+    /// </summary>
+    public TestServer Server { get; }
+
     /// <summary>
     ///     The service provider.
     /// </summary>

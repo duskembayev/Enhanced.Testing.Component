@@ -1,3 +1,5 @@
+using Microsoft.AspNetCore.TestHost;
+
 namespace Enhanced.Testing.Component;
 
 internal sealed class Component<TEntryPoint> : IComponent where TEntryPoint : class
@@ -13,6 +15,15 @@ internal sealed class Component<TEntryPoint> : IComponent where TEntryPoint : cl
     }
 
     public WebApplicationFactoryClientOptions ClientOptions => _appFactory.ClientOptions;
+
+    public TestServer Server
+    {
+        get
+        {
+            ThrowIfComponentNotStarted();
+            return _appFactory.Server;
+        }
+    }
 
     public IServiceProvider Services
     {
