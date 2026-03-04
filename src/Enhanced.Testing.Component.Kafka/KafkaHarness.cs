@@ -33,7 +33,9 @@ public class KafkaHarness : ContainerHarness<KafkaContainer>
     /// <inheritdoc />
     protected override KafkaContainer OnCreateContainer()
     {
-        return new KafkaBuilder().Build();
+        return new KafkaBuilder()
+            .WithImage("confluentinc/cp-kafka:7.6.1")
+            .Build();
     }
 
     /// <summary>
