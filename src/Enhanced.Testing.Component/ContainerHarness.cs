@@ -1,5 +1,4 @@
 using DotNet.Testcontainers.Containers;
-using Microsoft.Extensions.Configuration;
 
 namespace Enhanced.Testing.Component;
 
@@ -54,7 +53,7 @@ public abstract class ContainerHarness<TContainer> : Harness
     {
         if (_container is not null)
         {
-            await _container.StopAsync(cancellationToken).ConfigureAwait(false);
+            await _container.DisposeAsync().ConfigureAwait(false);
         }
     }
 
