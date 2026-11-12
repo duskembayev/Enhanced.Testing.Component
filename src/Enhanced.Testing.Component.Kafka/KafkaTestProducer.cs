@@ -46,6 +46,7 @@ public sealed class KafkaTestProducer<TKey, TValue> : IDisposable
     public Task<DeliveryResult<TKey, TValue>> ProduceAsync(Message<TKey, TValue> message,
         CancellationToken cancellationToken = default)
     {
+        ArgumentNullException.ThrowIfNull(message);
         ObjectDisposedException.ThrowIf(_disposed != 0, this);
         return _producer.ProduceAsync(Topic, message, cancellationToken);
     }

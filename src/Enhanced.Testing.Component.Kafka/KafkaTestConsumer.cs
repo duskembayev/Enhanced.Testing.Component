@@ -8,6 +8,7 @@ namespace Enhanced.Testing.Component.Kafka;
 /// <remarks>
 ///     Create it with
 ///     <see cref="KafkaHarnessExtensions.CreateConsumerAsync{TKey, TValue}" /> and dispose it at the end of the test.
+///     It reads partition 0 of the topic only. It is not thread-safe: do not consume, wait or seek concurrently.
 /// </remarks>
 /// <typeparam name="TKey">
 ///     The message key type.

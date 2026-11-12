@@ -159,6 +159,51 @@ public abstract class KafkaBrokerTests<TFixture>(TFixture fixture) : IClassFixtu
         Assert.NotEqual(first, second);
     }
 
+    [Fact]
+    public async Task ShouldNotSeeSharedTopicMessagesInUniqueTopic()
+    {
+        var topic = await fixture.Broker.CreateUniqueTopicAsync("isolated");
+
+        using var consumer = await fixture.Broker.CreateConsumerAsync<string, string>(topic);
+        using var producer = fixture.Broker.CreateProducer<string, string>(topic);
+
+        await fixture.Producer.ProduceAsync("shared", "shared");
+        await producer.ProduceAsync("unique", "unique");
+
+        var result = await consumer.WaitForMessageAsync(_ => true, MessageTimeout);
+
+        Assert.Equal("unique", result.Message.Key);
+    }
+
+    [Fact]
+    public async Task ShouldRejectInvalidUniqueTopicPrefix()
+    {
+        await Assert.ThrowsAsync<ArgumentException>(() => fixture.Broker.CreateUniqueTopicAsync("invalid prefix"));
+        await Assert.ThrowsAsync<ArgumentException>(() => fixture.Broker.CreateUniqueTopicAsync(new string('a', 217)));
+
+        var topic = await fixture.Broker.CreateUniqueTopicAsync(new string('a', 216));
+
+        Assert.Equal(249, topic.Length);
+    }
+
+    [Fact]
+    public async Task ShouldThrowWhenUniqueTopicClientsAreDisposed()
+    {
+        var topic = await fixture.Broker.CreateUniqueTopicAsync("disposed");
+
+        var consumer = await fixture.Broker.CreateConsumerAsync<string, string>(topic);
+        var producer = fixture.Broker.CreateProducer<string, string>(topic);
+
+        consumer.Dispose();
+        consumer.Dispose();
+        producer.Dispose();
+        producer.Dispose();
+
+        Assert.Throws<ObjectDisposedException>(() => consumer.Consume(TimeSpan.Zero));
+        await Assert.ThrowsAsync<ObjectDisposedException>(() => consumer.WaitForKeyAsync("key", MessageTimeout));
+        await Assert.ThrowsAsync<ObjectDisposedException>(() => producer.ProduceAsync("key", "value"));
+    }
+
     private async Task<string> RunIsolatedScenarioAsync(string value)
     {
         var topic = await fixture.Broker.CreateUniqueTopicAsync("isolated");
