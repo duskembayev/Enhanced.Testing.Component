@@ -9,10 +9,19 @@ namespace Enhanced.Testing.Component.Time;
 /// <summary>
 ///     A harness that replaces the application's <see cref="System.TimeProvider" /> with a <see cref="FakeTimeProvider" />.
 /// </summary>
+/// <remarks>
+///     The fake is registered as the only non-keyed <see cref="System.TimeProvider" /> singleton, after the application's
+///     own registrations. Only code that resolves <see cref="System.TimeProvider" /> from the service provider uses the
+///     fake clock, including framework and library services that do so; code that calls
+///     <see cref="System.TimeProvider.System" />, <see cref="DateTime.UtcNow" /> or <see cref="DateTimeOffset.UtcNow" />
+///     directly, and external services such as databases or brokers, keep using the real clock. The fake clock does not
+///     move on its own: delays, timers and timeouts scheduled on it complete only when the time is advanced.
+/// </remarks>
 public class TimeProviderHarness : Harness
 {
     /// <summary>
-    ///     Creates a harness whose clock starts at the <see cref="FakeTimeProvider" /> default time.
+    ///     Creates a harness whose clock starts at the <see cref="FakeTimeProvider" /> default time,
+    ///     midnight on January 1, 2000 UTC.
     /// </summary>
     public TimeProviderHarness()
         : this(new FakeTimeProvider())
@@ -50,13 +59,17 @@ public class TimeProviderHarness : Harness
     /// <summary>
     ///     Gets the current fake time.
     /// </summary>
+    /// <remarks>
+    ///     Reading this property calls <see cref="FakeTimeProvider.GetUtcNow" />, which advances the clock by
+    ///     <see cref="FakeTimeProvider.AutoAdvanceAmount" /> when it is set.
+    /// </remarks>
     public DateTimeOffset UtcNow => TimeProvider.GetUtcNow();
 
     /// <summary>
     ///     Advances the fake time and fires the timers that become due.
     /// </summary>
     /// <param name="delta">
-    ///     The amount of time to advance.
+    ///     The amount of time to advance, which must not be negative.
     /// </param>
     public void Advance(TimeSpan delta) => TimeProvider.Advance(delta);
 

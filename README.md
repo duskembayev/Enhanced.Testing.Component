@@ -22,6 +22,8 @@ The solution includes harnesses for the following components:
   [![NuGet](https://img.shields.io/nuget/v/Enhanced.Testing.Component.GrpcClient)](https://www.nuget.org/packages/Enhanced.Testing.Component.GrpcClient)
 - **HTTP Client**: Offers a harness for testing HTTP-based services and APIs.
   [![NuGet](https://img.shields.io/nuget/v/Enhanced.Testing.Component)](https://www.nuget.org/packages/Enhanced.Testing.Component)
+- **Time**: Replaces the application's `TimeProvider` with a `FakeTimeProvider` to control time in tests.
+  [![NuGet](https://img.shields.io/nuget/v/Enhanced.Testing.Component.Time)](https://www.nuget.org/packages/Enhanced.Testing.Component.Time)
 
 ## Getting Started
 
@@ -107,7 +109,15 @@ without opening network ports.
   position the wait starts from.
 - `RedisDatabaseHarness` gives direct access to the Redis database (`Database`).
 - `TimeProviderHarness` (`Enhanced.Testing.Component.Time`) replaces the application's `TimeProvider` with a
-  `FakeTimeProvider`, so timeouts, retries, TTLs and timers run instantly (`Advance`, `SetUtcNow`).
+  `FakeTimeProvider` (`TimeProvider`), so delays, timeouts and timers complete as soon as the test moves the clock
+  (`Advance`, `SetUtcNow`) instead of waiting for real time. It affects only code that resolves `TimeProvider` from
+  the service provider, including framework and library services that do so (for example, resilience handlers): their
+  timeouts and retry delays no longer elapse on their own. `DateTime.UtcNow`, `TimeProvider.System` and the containers
+  keep the real clock.
+
+  ```csharp
+  var time = new TimeProviderHarness(new DateTimeOffset(2030, 1, 1, 0, 0, 0, TimeSpan.Zero));
+  ```
 
 ### Configuring containers
 

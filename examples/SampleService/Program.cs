@@ -38,9 +38,9 @@ var app = builder.Build();
 app.MapHealthChecks("/health");
 app.MapGet("/time", (TimeProvider timeProvider) => timeProvider.GetUtcNow());
 app.MapGet("/delay/{seconds:int}",
-    async (int seconds, TimeProvider timeProvider) =>
+    async (int seconds, TimeProvider timeProvider, CancellationToken cancellationToken) =>
     {
-        await Task.Delay(TimeSpan.FromSeconds(seconds), timeProvider);
+        await Task.Delay(TimeSpan.FromSeconds(seconds), timeProvider, cancellationToken);
         return timeProvider.GetUtcNow();
     });
 app.MapGrpcService<GreeterService>();

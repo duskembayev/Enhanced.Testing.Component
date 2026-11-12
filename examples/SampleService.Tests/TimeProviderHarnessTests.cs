@@ -64,6 +64,7 @@ public class TimeProviderHarnessTests : IAsyncLifetime
             await Task.WhenAny(response, Task.Delay(TimeSpan.FromMilliseconds(20)));
         }
 
+        Assert.True(response.IsCompleted, "The delayed request did not complete after advancing the time.");
         var completedAt = await response;
 
         Assert.True(completedAt >= StartTime.AddHours(1));
