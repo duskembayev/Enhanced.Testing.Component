@@ -32,6 +32,10 @@ builder.Services.AddSingleton<IConnectionMultiplexer>(services =>
     return ConnectionMultiplexer.Connect(configuration.GetConnectionString(GreeterService.RedisConnectionStringName)!);
 });
 
+builder.Services.AddHttpClient("Quotes",
+    (services, client) =>
+        client.BaseAddress = new Uri(services.GetRequiredService<IConfiguration>()["QuotesApi:BaseUrl"]!));
+
 var app = builder.Build();
 
 app.MapHealthChecks("/health");
@@ -39,5 +43,8 @@ app.MapGrpcService<GreeterService>();
 app.MapGet("/",
     () =>
         "Communication with gRPC endpoints must be made through a gRPC client. To learn how to create a client, visit: https://go.microsoft.com/fwlink/?linkid=2086909");
+app.MapGet("/quote",
+    async (IHttpClientFactory httpClientFactory) =>
+        await httpClientFactory.CreateClient("Quotes").GetStringAsync("/quote"));
 
 app.Run();

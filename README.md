@@ -91,6 +91,9 @@ without opening network ports.
 
 ### Test data and assertions
 
+- `WireMockHarness` (`Enhanced.Testing.Component.WireMock`) hosts an in-process WireMock.Net server instead of a real
+  external HTTP service and passes its URL to the application (`ConfigurationKey`). Stub and verify calls through
+  `Server`, and call `Reset` between tests.
 - `DbContextHarness<TContext>` creates the schema on start (`EnsureCreatedOnStart`) and runs queries against the
   application's database (`ExecuteAsync`).
 - `KafkaHarness` and `RedpandaHarness` create topics on start (`Topics`; existing topics are kept) and wait until they
