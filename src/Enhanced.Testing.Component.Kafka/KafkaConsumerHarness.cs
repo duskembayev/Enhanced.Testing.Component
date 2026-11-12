@@ -5,22 +5,43 @@ namespace Enhanced.Testing.Component.Kafka;
 /// <summary>
 ///     A Kafka consumer harness.
 /// </summary>
-/// <param name="kafkaHarness">
-///     The Kafka harness.
-/// </param>
 /// <typeparam name="TKey">
 ///     The message key type.
 /// </typeparam>
 /// <typeparam name="TValue">
 ///     The message value type.
 /// </typeparam>
-public class KafkaConsumerHarness<TKey, TValue>(KafkaHarness kafkaHarness) : Harness
+public class KafkaConsumerHarness<TKey, TValue> : Harness
 {
     private static readonly TimeSpan StartTimeout = TimeSpan.FromSeconds(30);
     private static readonly TimeSpan QueryTimeout = TimeSpan.FromSeconds(5);
     private static readonly TimeSpan RetryDelay = TimeSpan.FromMilliseconds(200);
 
+    private readonly IKafkaHarness _kafkaHarness;
     private IConsumer<TKey, TValue>? _consumer;
+
+    /// <summary>
+    ///     Initializes a new instance of the <see cref="KafkaConsumerHarness{TKey, TValue}" /> class.
+    /// </summary>
+    /// <param name="kafkaHarness">
+    ///     The Kafka harness.
+    /// </param>
+    public KafkaConsumerHarness(KafkaHarness kafkaHarness)
+        : this((IKafkaHarness)kafkaHarness)
+    {
+    }
+
+    /// <summary>
+    ///     Initializes a new instance of the <see cref="KafkaConsumerHarness{TKey, TValue}" /> class.
+    /// </summary>
+    /// <param name="kafkaHarness">
+    ///     The Kafka-compatible broker harness.
+    /// </param>
+    public KafkaConsumerHarness(IKafkaHarness kafkaHarness)
+    {
+        ArgumentNullException.ThrowIfNull(kafkaHarness);
+        _kafkaHarness = kafkaHarness;
+    }
 
     /// <summary>
     ///     The topic to consume.
@@ -133,7 +154,7 @@ public class KafkaConsumerHarness<TKey, TValue>(KafkaHarness kafkaHarness) : Har
     {
         var consumerConfig = new ConsumerConfig
         {
-            BootstrapServers = kafkaHarness.GetConnectionString(),
+            BootstrapServers = _kafkaHarness.GetConnectionString(),
             GroupId = Guid.NewGuid().ToString("N"),
             AllowAutoCreateTopics = false,
             EnableAutoCommit = false,

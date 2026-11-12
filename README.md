@@ -15,7 +15,8 @@ The solution includes harnesses for the following components:
 - **Redis**: Provides support for both Redis and RedisStack, allowing for easy integration of Redis services into your
   tests.
   [![NuGet](https://img.shields.io/nuget/v/Enhanced.Testing.Component.Redis)](https://www.nuget.org/packages/Enhanced.Testing.Component.Redis)
-- **Kafka**: A harness for setting up a Kafka broker for message-based integration testing.
+- **Kafka**: Harnesses for a Kafka broker (Confluent, Apache Kafka native or Redpanda) for message-based integration
+  testing.
   [![NuGet](https://img.shields.io/nuget/v/Enhanced.Testing.Component.Kafka)](https://www.nuget.org/packages/Enhanced.Testing.Component.Kafka)
 - **gRPC Client**: Simplifies the process of testing gRPC services by providing a client harness.
   [![NuGet](https://img.shields.io/nuget/v/Enhanced.Testing.Component.GrpcClient)](https://www.nuget.org/packages/Enhanced.Testing.Component.GrpcClient)
@@ -92,8 +93,9 @@ without opening network ports.
 
 - `DbContextHarness<TContext>` creates the schema on start (`EnsureCreatedOnStart`) and runs queries against the
   application's database (`ExecuteAsync`).
-- `KafkaHarness` creates topics on start (`Topics`). `KafkaProducerHarness` sends messages to the application, and
-  `KafkaConsumerHarness` reads what it produced (`SeekToEnd`, `ConsumeMessage`).
+- `KafkaHarness` and `RedpandaHarness` create topics on start (`Topics`; existing topics are kept) and wait until they
+  have a partition leader. `KafkaProducerHarness` sends messages to the application, and `KafkaConsumerHarness` reads
+  what it produced (`SeekToEnd`, `ConsumeMessage`).
 - `RedisDatabaseHarness` gives direct access to the Redis database (`Database`).
 
 ### Configuring containers
@@ -108,6 +110,16 @@ var postgreSql = new PostgreSqlHarness
         .WithEnvironment("TZ", "UTC")
         .WithResourceMapping("init.sql", "/docker-entrypoint-initdb.d/")
 };
+```
+
+Any Kafka-compatible broker works with the producer and consumer harnesses (they accept `IKafkaHarness`). The default
+`confluentinc/cp-kafka` image is the most complete; `KafkaHarness.NativeImage` (`apache/kafka-native`) and
+`RedpandaHarness` start in a few seconds and use less memory, which suits fast local runs and CI:
+
+```csharp
+var kafka = new KafkaHarness { Image = KafkaHarness.NativeImage, Topics = ["orders"] };
+var redpanda = new RedpandaHarness { Topics = ["orders"], ConnectionName = "Kafka" };
+var consumer = new KafkaConsumerHarness<string, string>(redpanda) { Topic = "orders" };
 ```
 
 ### Custom harnesses

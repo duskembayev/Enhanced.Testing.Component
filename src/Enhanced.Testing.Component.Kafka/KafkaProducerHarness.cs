@@ -5,18 +5,39 @@ namespace Enhanced.Testing.Component.Kafka;
 /// <summary>
 ///     A Kafka producer harness.
 /// </summary>
-/// <param name="kafkaHarness">
-///     The Kafka harness.
-/// </param>
 /// <typeparam name="TKey">
 ///     The message key type.
 /// </typeparam>
 /// <typeparam name="TValue">
 ///     The message value type.
 /// </typeparam>
-public class KafkaProducerHarness<TKey, TValue>(KafkaHarness kafkaHarness) : Harness
+public class KafkaProducerHarness<TKey, TValue> : Harness
 {
+    private readonly IKafkaHarness _kafkaHarness;
     private IProducer<TKey, TValue>? _producer;
+
+    /// <summary>
+    ///     Initializes a new instance of the <see cref="KafkaProducerHarness{TKey, TValue}" /> class.
+    /// </summary>
+    /// <param name="kafkaHarness">
+    ///     The Kafka harness.
+    /// </param>
+    public KafkaProducerHarness(KafkaHarness kafkaHarness)
+        : this((IKafkaHarness)kafkaHarness)
+    {
+    }
+
+    /// <summary>
+    ///     Initializes a new instance of the <see cref="KafkaProducerHarness{TKey, TValue}" /> class.
+    /// </summary>
+    /// <param name="kafkaHarness">
+    ///     The Kafka-compatible broker harness.
+    /// </param>
+    public KafkaProducerHarness(IKafkaHarness kafkaHarness)
+    {
+        ArgumentNullException.ThrowIfNull(kafkaHarness);
+        _kafkaHarness = kafkaHarness;
+    }
 
     /// <summary>
     ///     The topic to produce.
@@ -70,7 +91,7 @@ public class KafkaProducerHarness<TKey, TValue>(KafkaHarness kafkaHarness) : Har
     {
         var producerConfig = new ProducerConfig
         {
-            BootstrapServers = kafkaHarness.GetConnectionString(), AllowAutoCreateTopics = false
+            BootstrapServers = _kafkaHarness.GetConnectionString(), AllowAutoCreateTopics = false
         };
 
         _producer = new ProducerBuilder<TKey, TValue>(producerConfig)
