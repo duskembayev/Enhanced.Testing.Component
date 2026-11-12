@@ -35,15 +35,23 @@ public abstract class Harness : IHarness
     {
         if (_component is not null)
         {
-            throw new NotSupportedException();
+            throw new NotSupportedException("The harness is already started by a component.");
         }
 
         _component = component;
         return OnStart(cancellationToken);
     }
 
-    Task IComponentDependency.OnStopAsync(IComponent component, CancellationToken cancellationToken) =>
-        OnStop(cancellationToken);
+    async Task IComponentDependency.OnStopAsync(IComponent component, CancellationToken cancellationToken)
+    {
+        if (!ReferenceEquals(_component, component))
+        {
+            return;
+        }
+
+        await OnStop(cancellationToken).ConfigureAwait(false);
+        _component = null;
+    }
 
     /// <summary>
     ///     Called when the component is starting.
@@ -62,7 +70,7 @@ public abstract class Harness : IHarness
     protected virtual Task OnStop(CancellationToken cancellationToken) => Task.CompletedTask;
 
     /// <summary>
-    ///     Throws an exception if the component is not started.
+    ///     Throws an exception if the harness is not started or has been stopped.
     /// </summary>
     /// <exception cref="InvalidOperationException">
     ///     Thrown if the component is not started.

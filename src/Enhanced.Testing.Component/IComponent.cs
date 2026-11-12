@@ -69,7 +69,9 @@ public interface IComponent
     HttpClient CreateDefaultClient(Uri baseAddress, params DelegatingHandler[] handlers);
 
     /// <summary>
-    ///     Start the component and its dependencies.
+    ///     Start the dependencies in order, then the application.
+    ///     If starting fails, everything started so far is stopped before the exception is rethrown.
+    ///     A component can be started only once.
     /// </summary>
     /// <param name="cancellationToken">
     ///     The cancellation token.
@@ -77,11 +79,13 @@ public interface IComponent
     Task StartAsync(CancellationToken cancellationToken);
 
     /// <summary>
-    ///     Stop the component and its dependencies.
+    ///     Shut down the application while its dependencies are still running, then stop the dependencies in reverse
+    ///     order. A failing dependency does not prevent the others from stopping; the failures are rethrown afterwards
+    ///     and calling this method again retries only the steps that did not complete.
     /// </summary>
     /// <param name="cancellationToken">
-    ///     The cancellation token.
+    ///     The cancellation token. Cancellation is observed between steps: a step in progress is completed, the
+    ///     remaining steps are skipped and <see cref="OperationCanceledException" /> is thrown.
     /// </param>
-    /// <returns></returns>
     Task StopAsync(CancellationToken cancellationToken);
 }

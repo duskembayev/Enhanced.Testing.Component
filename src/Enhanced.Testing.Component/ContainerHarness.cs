@@ -57,16 +57,13 @@ public abstract class ContainerHarness<TContainer> : Harness
     /// <inheritdoc />
     protected override async Task OnStop(CancellationToken cancellationToken)
     {
-        var container = _container;
-
-        if (container is null)
+        if (_container is null)
         {
             return;
         }
 
+        await _container.DisposeAsync().ConfigureAwait(false);
         _container = default;
-
-        await container.DisposeAsync().AsTask().WaitAsync(cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>

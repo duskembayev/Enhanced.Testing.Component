@@ -17,7 +17,8 @@ public interface IComponentDependency
     Task OnStartAsync(IComponent component, CancellationToken cancellationToken);
 
     /// <summary>
-    ///     Called when the component is stopped.
+    ///     Called when the component is stopped, after the application has been shut down.
+    ///     The application services and test server are no longer available at this point.
     /// </summary>
     /// <param name="component">
     ///     The component.

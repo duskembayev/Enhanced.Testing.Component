@@ -80,7 +80,9 @@ public class KafkaProducerHarness<TKey, TValue>(KafkaHarness kafkaHarness) : Har
     /// <inheritdoc />
     protected override Task OnStop(CancellationToken cancellationToken)
     {
-        _producer?.Dispose();
+        var producer = _producer;
+        _producer = null;
+        producer?.Dispose();
         return Task.CompletedTask;
     }
 }
