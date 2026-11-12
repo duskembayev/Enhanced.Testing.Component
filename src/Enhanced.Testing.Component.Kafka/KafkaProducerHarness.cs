@@ -55,6 +55,7 @@ public class KafkaProducerHarness<TKey, TValue> : Harness
     public ISerializer<TValue>? ValueSerializer { get; set; }
 
     private static readonly TimeSpan FlushTimeout = TimeSpan.FromSeconds(10);
+    private static readonly TimeSpan WarmUpTimeout = TimeSpan.FromSeconds(5);
 
     /// <summary>
     ///     Produces a message.
@@ -91,13 +92,19 @@ public class KafkaProducerHarness<TKey, TValue> : Harness
     {
         var producerConfig = new ProducerConfig
         {
-            BootstrapServers = _kafkaHarness.GetConnectionString(), AllowAutoCreateTopics = false
+            BootstrapServers = _kafkaHarness.GetConnectionString(),
+            AllowAutoCreateTopics = false,
+            Acks = Acks.All,
+            LingerMs = 0,
+            SocketNagleDisable = true
         };
 
         _producer = new ProducerBuilder<TKey, TValue>(producerConfig)
                     .SetKeySerializer(KeySerializer)
                     .SetValueSerializer(ValueSerializer)
                     .Build();
+
+        WarmUp(_producer);
 
         return Task.CompletedTask;
     }
@@ -123,5 +130,18 @@ public class KafkaProducerHarness<TKey, TValue> : Harness
         }
 
         return Task.CompletedTask;
+    }
+
+    private void WarmUp(IProducer<TKey, TValue> producer)
+    {
+        using var adminClient = new DependentAdminClientBuilder(producer.Handle).Build();
+
+        try
+        {
+            adminClient.GetMetadata(Topic, WarmUpTimeout);
+        }
+        catch (KafkaException)
+        {
+        }
     }
 }

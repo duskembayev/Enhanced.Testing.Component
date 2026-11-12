@@ -71,26 +71,48 @@ public abstract class KafkaBrokerTests<TFixture>(TFixture fixture) : IClassFixtu
 
         await fixture.Producer.ProduceAsync(key, "value");
 
-        var message = ConsumeKey(key);
+        var message = await fixture.Consumer.WaitForKeyAsync(key, MessageTimeout);
 
         Assert.Equal("value", message.Value);
     }
 
-    private Confluent.Kafka.Message<string, string> ConsumeKey(string key)
+    [Fact]
+    public async Task ShouldSkipMessagesThatDoNotMatch()
     {
-        var deadline = DateTime.UtcNow + MessageTimeout;
+        var expected = Guid.NewGuid().ToString("N");
 
-        while (DateTime.UtcNow < deadline)
-        {
-            var message = fixture.Consumer.ConsumeMessage(deadline - DateTime.UtcNow);
+        await fixture.Producer.ProduceAsync(Guid.NewGuid().ToString("N"), "other");
+        await fixture.Producer.ProduceAsync(expected, "expected");
 
-            if (message?.Key == key)
-            {
-                return message;
-            }
-        }
+        var result = await fixture.Consumer.WaitForMessageAsync(r => r.Message.Key == expected, MessageTimeout);
 
-        throw new TimeoutException($"Message '{key}' was not received.");
+        Assert.Equal("expected", result.Message.Value);
+    }
+
+    [Fact]
+    public async Task ShouldTimeOutWhenNoMessageMatches()
+    {
+        await fixture.Producer.ProduceAsync(Guid.NewGuid().ToString("N"), "other");
+
+        var exception = await Assert.ThrowsAsync<TimeoutException>(()
+            => fixture.Consumer.WaitForKeyAsync("missing", TimeSpan.FromSeconds(1)));
+
+        Assert.Contains("skipped", exception.Message);
+    }
+
+    [Fact]
+    public async Task ShouldFindEarlierMessageAfterSeekToBeginning()
+    {
+        var key = Guid.NewGuid().ToString("N");
+
+        await fixture.Producer.ProduceAsync(key, "earlier");
+        await fixture.Consumer.WaitForKeyAsync(key, MessageTimeout);
+
+        fixture.Consumer.SeekToBeginning();
+
+        var message = await fixture.Consumer.WaitForKeyAsync(key, MessageTimeout);
+
+        Assert.Equal("earlier", message.Value);
     }
 
     [Fact]

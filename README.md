@@ -95,7 +95,16 @@ without opening network ports.
   application's database (`ExecuteAsync`).
 - `KafkaHarness` and `RedpandaHarness` create topics on start (`Topics`; existing topics are kept) and wait until they
   have a partition leader. `KafkaProducerHarness` sends messages to the application, and `KafkaConsumerHarness` reads
-  what it produced (`SeekToEnd`, `ConsumeMessage`).
+  what it produced. The consumer is positioned at the end of the topic on start; prefer waiting for *your* message
+  over reading the next one, so messages left by other tests or a slow producer don't make the test flaky:
+
+  ```csharp
+  var message = await consumer.WaitForKeyAsync("order-42", TimeSpan.FromSeconds(10));
+  var result = await consumer.WaitForMessageAsync(r => r.Message.Value.Contains("42"), TimeSpan.FromSeconds(10));
+  ```
+
+  Non-matching messages are skipped; a `TimeoutException` reports how many. `SeekToBeginning`/`SeekToEnd` move the
+  position the wait starts from.
 - `RedisDatabaseHarness` gives direct access to the Redis database (`Database`).
 
 ### Configuring containers
@@ -113,8 +122,9 @@ var postgreSql = new PostgreSqlHarness
 ```
 
 Any Kafka-compatible broker works with the producer and consumer harnesses (they accept `IKafkaHarness`). The default
-`confluentinc/cp-kafka` image is the most complete; `KafkaHarness.NativeImage` (`apache/kafka-native`) and
-`RedpandaHarness` start in a few seconds and use less memory, which suits fast local runs and CI:
+`confluentinc/cp-kafka` image matches the Confluent Platform. `KafkaHarness.NativeImage` (`apache/kafka-native`, a
+GraalVM build of Apache Kafka) starts fastest and uses less memory, which suits local runs and CI. `RedpandaHarness`
+runs Redpanda, for applications that use it in production:
 
 ```csharp
 var kafka = new KafkaHarness { Image = KafkaHarness.NativeImage, Topics = ["orders"] };

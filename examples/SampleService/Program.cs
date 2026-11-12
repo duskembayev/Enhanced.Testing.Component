@@ -1,6 +1,8 @@
+using Confluent.Kafka;
 using Microsoft.EntityFrameworkCore;
 using SampleService.Models;
 using SampleService.Services;
+using StackExchange.Redis;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -11,6 +13,23 @@ builder.Services.AddDbContext<PeopleDbContext>(options =>
 {
     var connectionString = builder.Configuration.GetConnectionString(PeopleDbContext.ConnectionStringName);
     options.UseNpgsql(connectionString);
+});
+
+builder.Services.AddSingleton<IProducer<string, string>>(services =>
+{
+    var configuration = services.GetRequiredService<IConfiguration>();
+    var config = new ProducerConfig
+    {
+        BootstrapServers = configuration.GetConnectionString(GreeterService.KafkaConnectionStringName)
+    };
+
+    return new ProducerBuilder<string, string>(config).Build();
+});
+
+builder.Services.AddSingleton<IConnectionMultiplexer>(services =>
+{
+    var configuration = services.GetRequiredService<IConfiguration>();
+    return ConnectionMultiplexer.Connect(configuration.GetConnectionString(GreeterService.RedisConnectionStringName)!);
 });
 
 var app = builder.Build();

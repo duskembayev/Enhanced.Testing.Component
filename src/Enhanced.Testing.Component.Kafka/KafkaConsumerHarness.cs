@@ -65,11 +65,16 @@ public class KafkaConsumerHarness<TKey, TValue> : Harness
     ///     The offset to seek to.
     /// </param>
     /// <param name="timeout">
-    ///     The timeout to wait for the operation.
+    ///     The timeout to wait for the operation. An infinite timeout is limited to 30 seconds.
     /// </param>
     public void Seek(Offset offset, TimeSpan timeout)
     {
         ThrowIfComponentNotStarted();
+
+        if (timeout == Timeout.InfiniteTimeSpan)
+        {
+            timeout = StartTimeout;
+        }
 
         var tp = new TopicPartition(Topic, 0);
         var tpo = new TopicPartitionOffset(tp, offset);
@@ -149,6 +154,39 @@ public class KafkaConsumerHarness<TKey, TValue> : Harness
         return _consumer!.Consume(millisecondsTimeout);
     }
 
+    /// <summary>
+    ///     Waits for a message that matches the predicate, skipping the messages that do not match.
+    /// </summary>
+    /// <remarks>
+    ///     Messages are read from the current position: the end of the topic when the harness starts, or the offset set
+    ///     by <see cref="Seek" />. Matching on a unique key or value keeps the test independent of messages produced by
+    ///     earlier tests.
+    /// </remarks>
+    /// <param name="predicate">
+    ///     The condition the message must satisfy.
+    /// </param>
+    /// <param name="timeout">
+    ///     The maximum time to wait for a matching message.
+    /// </param>
+    /// <param name="cancellationToken">
+    ///     The cancellation token.
+    /// </param>
+    /// <returns>
+    ///     The first matching message.
+    /// </returns>
+    /// <exception cref="TimeoutException">
+    ///     Thrown when no matching message arrives within <paramref name="timeout" />.
+    /// </exception>
+    public Task<ConsumeResult<TKey, TValue>> WaitForMessageAsync(Func<ConsumeResult<TKey, TValue>, bool> predicate,
+        TimeSpan timeout, CancellationToken cancellationToken = default)
+    {
+        ThrowIfComponentNotStarted();
+        ArgumentNullException.ThrowIfNull(predicate);
+
+        var consumer = _consumer!;
+        return Task.Run(() => WaitForMessage(consumer, predicate, timeout, cancellationToken), cancellationToken);
+    }
+
     /// <inheritdoc />
     protected override async Task OnStart(CancellationToken cancellationToken)
     {
@@ -158,7 +196,9 @@ public class KafkaConsumerHarness<TKey, TValue> : Harness
             GroupId = Guid.NewGuid().ToString("N"),
             AllowAutoCreateTopics = false,
             EnableAutoCommit = false,
-            AutoOffsetReset = AutoOffsetReset.Latest
+            AutoOffsetReset = AutoOffsetReset.Latest,
+            FetchWaitMaxMs = 50,
+            SocketNagleDisable = true
         };
 
         var consumerBuilder = new ConsumerBuilder<TKey, TValue>(consumerConfig)
@@ -195,6 +235,41 @@ public class KafkaConsumerHarness<TKey, TValue> : Harness
         }
 
         return Task.CompletedTask;
+    }
+
+    private ConsumeResult<TKey, TValue> WaitForMessage(IConsumer<TKey, TValue> consumer,
+        Func<ConsumeResult<TKey, TValue>, bool> predicate, TimeSpan timeout, CancellationToken cancellationToken)
+    {
+        using var timeoutSource = new CancellationTokenSource(timeout);
+        using var linkedSource = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeoutSource.Token);
+
+        var skipped = 0;
+
+        try
+        {
+            while (true)
+            {
+                var result = consumer.Consume(linkedSource.Token);
+
+                if (result is null || result.IsPartitionEOF)
+                {
+                    continue;
+                }
+
+                if (predicate(result))
+                {
+                    return result;
+                }
+
+                skipped++;
+            }
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            throw new TimeoutException(
+                $"No matching message arrived in topic '{Topic}' within {timeout.TotalMilliseconds:0} ms " +
+                $"({skipped} non-matching message(s) skipped).");
+        }
     }
 
     private static async Task<WatermarkOffsets> QueryWatermarkOffsetsAsync(IConsumer<TKey, TValue> consumer,
