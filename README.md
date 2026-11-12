@@ -107,13 +107,13 @@ without opening network ports.
   position the wait starts from.
 
   To let tests share one broker and still run in parallel, give each test its own topic. `CreateUniqueTopicAsync`
-  creates a topic with a unique name and waits for its leader; `CreateConsumerAsync` and `CreateProducer` return
+  creates a topic with a unique name and waits for its leader; `CreateConsumerAsync` and `CreateProducerAsync` return
   disposable clients bound to it, with the same `WaitFor*` API:
 
   ```csharp
   var topic = await kafka.CreateUniqueTopicAsync("orders");
   using var consumer = await kafka.CreateConsumerAsync<string, string>(topic);
-  using var producer = kafka.CreateProducer<string, string>(topic);
+  using var producer = await kafka.CreateProducerAsync<string, string>(topic);
 
   await producer.ProduceAsync("order-42", "created");
   var message = await consumer.WaitForKeyAsync("order-42", TimeSpan.FromSeconds(10));

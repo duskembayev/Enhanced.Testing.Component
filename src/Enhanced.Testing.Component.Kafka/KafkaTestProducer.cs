@@ -6,7 +6,7 @@ namespace Enhanced.Testing.Component.Kafka;
 ///     A producer to a single topic created during a test.
 /// </summary>
 /// <remarks>
-///     Create it with <see cref="KafkaHarnessExtensions.CreateProducer{TKey, TValue}" /> and dispose it at the end of the
+///     Create it with <see cref="KafkaHarnessExtensions.CreateProducerAsync{TKey, TValue}" /> and dispose it at the end of the
 ///     test.
 /// </remarks>
 /// <typeparam name="TKey">

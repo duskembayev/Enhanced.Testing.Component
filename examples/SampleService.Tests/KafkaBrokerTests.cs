@@ -138,7 +138,7 @@ public abstract class KafkaBrokerTests<TFixture>(TFixture fixture) : IClassFixtu
     {
         var topic = await fixture.Broker.CreateUniqueTopicAsync("seek");
 
-        using var producer = fixture.Broker.CreateProducer<string, string>(topic);
+        using var producer = await fixture.Broker.CreateProducerAsync<string, string>(topic);
         await producer.ProduceAsync("key", "earlier");
 
         using var consumer = await fixture.Broker.CreateConsumerAsync<string, string>(topic);
@@ -165,7 +165,7 @@ public abstract class KafkaBrokerTests<TFixture>(TFixture fixture) : IClassFixtu
         var topic = await fixture.Broker.CreateUniqueTopicAsync("isolated");
 
         using var consumer = await fixture.Broker.CreateConsumerAsync<string, string>(topic);
-        using var producer = fixture.Broker.CreateProducer<string, string>(topic);
+        using var producer = await fixture.Broker.CreateProducerAsync<string, string>(topic);
 
         await fixture.Producer.ProduceAsync("shared", "shared");
         await producer.ProduceAsync("unique", "unique");
@@ -192,7 +192,7 @@ public abstract class KafkaBrokerTests<TFixture>(TFixture fixture) : IClassFixtu
         var topic = await fixture.Broker.CreateUniqueTopicAsync("disposed");
 
         var consumer = await fixture.Broker.CreateConsumerAsync<string, string>(topic);
-        var producer = fixture.Broker.CreateProducer<string, string>(topic);
+        var producer = await fixture.Broker.CreateProducerAsync<string, string>(topic);
 
         consumer.Dispose();
         consumer.Dispose();
@@ -209,7 +209,7 @@ public abstract class KafkaBrokerTests<TFixture>(TFixture fixture) : IClassFixtu
         var topic = await fixture.Broker.CreateUniqueTopicAsync("isolated");
 
         using var consumer = await fixture.Broker.CreateConsumerAsync<string, string>(topic);
-        using var producer = fixture.Broker.CreateProducer<string, string>(topic);
+        using var producer = await fixture.Broker.CreateProducerAsync<string, string>(topic);
 
         await producer.ProduceAsync("order-1", value);
 

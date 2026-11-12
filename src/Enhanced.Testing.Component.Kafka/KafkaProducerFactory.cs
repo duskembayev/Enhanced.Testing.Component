@@ -10,6 +10,33 @@ internal static class KafkaProducerFactory
     public static IProducer<TKey, TValue> Create<TKey, TValue>(string bootstrapServers, string topic,
         ISerializer<TKey>? keySerializer, ISerializer<TValue>? valueSerializer)
     {
+        var producer = Build(bootstrapServers, keySerializer, valueSerializer);
+        WarmUp(producer, topic);
+        return producer;
+    }
+
+    public static async Task<IProducer<TKey, TValue>> CreateAsync<TKey, TValue>(string bootstrapServers,
+        string topic, ISerializer<TKey>? keySerializer, ISerializer<TValue>? valueSerializer,
+        CancellationToken cancellationToken)
+    {
+        var producer = Build(bootstrapServers, keySerializer, valueSerializer);
+
+        try
+        {
+            await Task.Run(() => WarmUp(producer, topic), cancellationToken).ConfigureAwait(false);
+        }
+        catch
+        {
+            producer.Dispose();
+            throw;
+        }
+
+        return producer;
+    }
+
+    private static IProducer<TKey, TValue> Build<TKey, TValue>(string bootstrapServers,
+        ISerializer<TKey>? keySerializer, ISerializer<TValue>? valueSerializer)
+    {
         var producerConfig = new ProducerConfig
         {
             BootstrapServers = bootstrapServers,
@@ -23,8 +50,6 @@ internal static class KafkaProducerFactory
                        .SetKeySerializer(keySerializer)
                        .SetValueSerializer(valueSerializer)
                        .Build();
-
-        WarmUp(producer, topic);
 
         return producer;
     }

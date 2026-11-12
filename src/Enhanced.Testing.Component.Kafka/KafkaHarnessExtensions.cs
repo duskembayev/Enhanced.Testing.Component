@@ -131,17 +131,21 @@ public static class KafkaHarnessExtensions
     /// <typeparam name="TValue">
     ///     The message value type.
     /// </typeparam>
+    /// <param name="cancellationToken">
+    ///     The cancellation token.
+    /// </param>
     /// <returns>
     ///     The producer. Dispose it when the test ends.
     /// </returns>
-    public static KafkaTestProducer<TKey, TValue> CreateProducer<TKey, TValue>(this IKafkaHarness broker,
-        string topic, ISerializer<TKey>? keySerializer = null, ISerializer<TValue>? valueSerializer = null)
+    public static async Task<KafkaTestProducer<TKey, TValue>> CreateProducerAsync<TKey, TValue>(
+        this IKafkaHarness broker, string topic, ISerializer<TKey>? keySerializer = null,
+        ISerializer<TValue>? valueSerializer = null, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(broker);
         ArgumentException.ThrowIfNullOrEmpty(topic);
 
-        var producer = KafkaProducerFactory.Create(broker.GetConnectionString(), topic, keySerializer,
-            valueSerializer);
+        var producer = await KafkaProducerFactory.CreateAsync(broker.GetConnectionString(), topic, keySerializer,
+            valueSerializer, cancellationToken).ConfigureAwait(false);
 
         return new KafkaTestProducer<TKey, TValue>(producer, topic);
     }
