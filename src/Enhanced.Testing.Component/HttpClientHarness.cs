@@ -6,10 +6,10 @@ namespace Enhanced.Testing.Component;
 public class HttpClientHarness : Harness
 {
     /// <summary>
-    ///     Creates a new instance of the <see cref="HttpClientHarness" /> class.
+    ///     Creates an <see cref="HttpClient" /> that calls the application under test.
     /// </summary>
     /// <returns>
-    ///     The <see cref="HttpClientHarness" /> instance.
+    ///     The HTTP client.
     /// </returns>
     public HttpClient CreateClient() => Component.CreateClient();
 }

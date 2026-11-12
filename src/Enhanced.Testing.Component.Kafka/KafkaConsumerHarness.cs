@@ -16,6 +16,10 @@ namespace Enhanced.Testing.Component.Kafka;
 /// </typeparam>
 public class KafkaConsumerHarness<TKey, TValue>(KafkaHarness kafkaHarness) : Harness
 {
+    private static readonly TimeSpan StartTimeout = TimeSpan.FromSeconds(30);
+    private static readonly TimeSpan QueryTimeout = TimeSpan.FromSeconds(5);
+    private static readonly TimeSpan RetryDelay = TimeSpan.FromMilliseconds(200);
+
     private IConsumer<TKey, TValue>? _consumer;
 
     /// <summary>
@@ -76,7 +80,7 @@ public class KafkaConsumerHarness<TKey, TValue>(KafkaHarness kafkaHarness) : Har
             throw new NotSupportedException("Offset kind is not supported.");
         }
 
-        _consumer!.Seek(tpo);
+        _consumer!.Assign(tpo);
     }
 
     /// <summary>
@@ -125,7 +129,7 @@ public class KafkaConsumerHarness<TKey, TValue>(KafkaHarness kafkaHarness) : Har
     }
 
     /// <inheritdoc />
-    protected override Task OnStart(CancellationToken cancellationToken)
+    protected override async Task OnStart(CancellationToken cancellationToken)
     {
         var consumerConfig = new ConsumerConfig
         {
@@ -141,9 +145,11 @@ public class KafkaConsumerHarness<TKey, TValue>(KafkaHarness kafkaHarness) : Har
                               .SetValueDeserializer(ValueDeserializer);
 
         _consumer = consumerBuilder.Build();
-        _consumer.Assign(new TopicPartitionOffset(Topic, 0, Offset.End));
 
-        return Task.CompletedTask;
+        var partition = new TopicPartition(Topic, 0);
+        var watermarks = await QueryWatermarkOffsetsAsync(_consumer, partition, cancellationToken).ConfigureAwait(false);
+
+        _consumer.Assign(new TopicPartitionOffset(partition, watermarks.High));
     }
 
     /// <inheritdoc />
@@ -168,5 +174,25 @@ public class KafkaConsumerHarness<TKey, TValue>(KafkaHarness kafkaHarness) : Har
         }
 
         return Task.CompletedTask;
+    }
+
+    private static async Task<WatermarkOffsets> QueryWatermarkOffsetsAsync(IConsumer<TKey, TValue> consumer,
+        TopicPartition partition, CancellationToken cancellationToken)
+    {
+        var deadline = DateTime.UtcNow + StartTimeout;
+
+        while (true)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            try
+            {
+                return consumer.QueryWatermarkOffsets(partition, QueryTimeout);
+            }
+            catch (KafkaException) when (DateTime.UtcNow < deadline)
+            {
+                await Task.Delay(RetryDelay, cancellationToken).ConfigureAwait(false);
+            }
+        }
     }
 }

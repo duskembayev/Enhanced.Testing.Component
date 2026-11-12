@@ -1,3 +1,4 @@
+using System.Data.Common;
 using Testcontainers.PostgreSql;
 
 namespace Enhanced.Testing.Component.PostgreSql;
@@ -45,15 +46,20 @@ public class PostgreSqlHarness : ContainerHarness<PostgreSqlContainer>
     /// <inheritdoc />
     public override string GetConnectionString()
     {
-        var properties = new Dictionary<string, string>(ConnectionProperties)
+        var builder = new DbConnectionStringBuilder();
+
+        foreach (var (key, value) in ConnectionProperties)
         {
-            ["Host"] = Container.Hostname,
-            ["Port"] = Container.GetMappedPublicPort(PostgreSqlBuilder.PostgreSqlPort).ToString(),
-            ["Database"] = Database,
-            ["Username"] = Username,
-            ["Password"] = Password
-        };
-        return string.Join(";", properties.Select(property => string.Join("=", property.Key, property.Value)));
+            builder[key] = value;
+        }
+
+        builder["Host"] = Container.Hostname;
+        builder["Port"] = Container.GetMappedPublicPort(PostgreSqlBuilder.PostgreSqlPort).ToString();
+        builder["Database"] = Database;
+        builder["Username"] = Username;
+        builder["Password"] = Password;
+
+        return builder.ConnectionString;
     }
 
     /// <inheritdoc />

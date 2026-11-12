@@ -9,10 +9,10 @@ namespace Enhanced.Testing.Component.GrpcClient;
 /// </summary>
 public class GrpcClientHarness : Harness
 {
-    private readonly ConcurrentDictionary<Type, GrpcChannel> _channels = new();
+    private readonly ConcurrentDictionary<Type, Lazy<GrpcChannel>> _channels = new();
 
     /// <summary>
-    ///     Creates a new instance of gRPC client />.
+    ///     Creates a gRPC client that calls the application under test.
     /// </summary>
     /// <typeparam name="TClient">
     ///     Type of the gRPC client to create.
@@ -24,7 +24,7 @@ public class GrpcClientHarness : Harness
         where TClient : ClientBase
     {
         ThrowIfComponentNotStarted();
-        var channel = _channels.GetOrAdd(typeof(TClient), _ => CreateGrpcChannel());
+        var channel = _channels.GetOrAdd(typeof(TClient), _ => new Lazy<GrpcChannel>(CreateGrpcChannel)).Value;
         return (TClient)Activator.CreateInstance(typeof(TClient), channel)!;
     }
 
@@ -33,7 +33,7 @@ public class GrpcClientHarness : Harness
         var httpClient = Component.CreateClient();
         return GrpcChannel.ForAddress(
             httpClient.BaseAddress!,
-            new GrpcChannelOptions { HttpClient = httpClient });
+            new GrpcChannelOptions { HttpClient = httpClient, DisposeHttpClient = true });
     }
 
     /// <inheritdoc />
@@ -41,10 +41,12 @@ public class GrpcClientHarness : Harness
     {
         foreach (var type in _channels.Keys)
         {
-            if (!_channels.TryRemove(type, out var channel))
+            if (!_channels.TryRemove(type, out var lazyChannel) || !lazyChannel.IsValueCreated)
             {
                 continue;
             }
+
+            var channel = lazyChannel.Value;
 
             try
             {

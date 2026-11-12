@@ -33,6 +33,8 @@ public class KafkaProducerHarness<TKey, TValue>(KafkaHarness kafkaHarness) : Har
     /// </summary>
     public ISerializer<TValue>? ValueSerializer { get; set; }
 
+    private static readonly TimeSpan FlushTimeout = TimeSpan.FromSeconds(10);
+
     /// <summary>
     ///     Produces a message.
     /// </summary>
@@ -54,7 +56,9 @@ public class KafkaProducerHarness<TKey, TValue>(KafkaHarness kafkaHarness) : Har
     /// <param name="cancellationToken">
     ///     The cancellation token.
     /// </param>
-    /// <returns></returns>
+    /// <returns>
+    ///     A task that completes when the message is delivered.
+    /// </returns>
     public Task ProduceAsync(Message<TKey, TValue> message, CancellationToken cancellationToken = default)
     {
         ThrowIfComponentNotStarted();
@@ -82,7 +86,21 @@ public class KafkaProducerHarness<TKey, TValue>(KafkaHarness kafkaHarness) : Har
     {
         var producer = _producer;
         _producer = null;
-        producer?.Dispose();
+
+        if (producer is null)
+        {
+            return Task.CompletedTask;
+        }
+
+        try
+        {
+            producer.Flush(FlushTimeout);
+        }
+        finally
+        {
+            producer.Dispose();
+        }
+
         return Task.CompletedTask;
     }
 }

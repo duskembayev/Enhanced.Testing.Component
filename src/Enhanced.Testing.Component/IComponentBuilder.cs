@@ -17,10 +17,14 @@ public interface IComponentBuilder
     IComponentBuilder AddDependency(IComponentDependency dependency);
 
     /// <summary>
-    ///     Configures the component.
+    ///     Configures the web host of the application under test.
     /// </summary>
-    /// <param name="configuration"></param>
-    /// <returns></returns>
+    /// <param name="configuration">
+    ///     The web host builder configuration.
+    /// </param>
+    /// <returns>
+    ///     The component builder.
+    /// </returns>
     IComponentBuilder Configure(Action<IWebHostBuilder> configuration);
 
     /// <summary>
