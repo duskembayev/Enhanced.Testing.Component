@@ -193,70 +193,57 @@ internal sealed class Component<TEntryPoint> : IComponent where TEntryPoint : cl
     private async Task StartContainersAsync(CancellationToken cancellationToken)
     {
         var starts = new List<Task>();
+        var scheduled = new HashSet<IComponentDependency>(ReferenceEqualityComparer.Instance);
 
         for (var i = 0; i < _dependencies.Count; i++)
         {
-            if (!IsContainerHarness(_dependencies[i]))
+            var dependency = _dependencies[i];
+
+            if (dependency is not IConcurrentStartDependency { StartConcurrently: true } || !scheduled.Add(dependency))
             {
                 continue;
             }
 
-            var dependency = _dependencies[i];
             _startedDependencies[i] = true;
             starts.Add(Task.Run(() => dependency.OnStartAsync(this, cancellationToken), CancellationToken.None));
         }
 
-        if (starts.Count == 0)
+        List<Exception>? exceptions = null;
+
+        foreach (var start in starts)
+        {
+            try
+            {
+                await start.ConfigureAwait(false);
+            }
+            catch (Exception e)
+            {
+                (exceptions ??= []).Add(e);
+            }
+        }
+
+        if (exceptions is null)
         {
             return;
         }
 
-        try
+        var failures = exceptions.Where(e => !IsCancellation(e, cancellationToken)).ToList();
+
+        if (failures.Count == 0)
         {
-            await Task.WhenAll(starts).ConfigureAwait(false);
+            ExceptionDispatchInfo.Throw(exceptions[0]);
         }
-        catch
+
+        if (failures.Count == 1)
         {
-            var exceptions = starts.Where(start => start.IsFaulted)
-                                   .SelectMany(start => start.Exception!.InnerExceptions)
-                                   .ToList();
-
-            if (exceptions.Count == 0)
-            {
-                throw;
-            }
-
-            var failures = exceptions.Where(e => !IsCancellation(e, cancellationToken)).ToList();
-
-            if (failures.Count == 0)
-            {
-                ExceptionDispatchInfo.Throw(exceptions[0]);
-            }
-
-            if (failures.Count == 1)
-            {
-                ExceptionDispatchInfo.Throw(failures[0]);
-            }
-
-            throw new AggregateException("One or more container harnesses failed to start.", failures);
+            ExceptionDispatchInfo.Throw(failures[0]);
         }
+
+        throw new AggregateException("One or more container harnesses failed to start.", failures);
     }
 
     private static bool IsCancellation(Exception exception, CancellationToken cancellationToken) =>
         exception is OperationCanceledException && cancellationToken.IsCancellationRequested;
-
-    private static bool IsContainerHarness(IComponentDependency dependency)
-    {
-        for (var type = dependency.GetType(); type is not null; type = type.BaseType)
-        {
-            if (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(ContainerHarness<>))
-            {
-                return true;
-            }
-        }
-
-        return false;
-    }
 
     private void ThrowIfComponentNotStarted()
     {

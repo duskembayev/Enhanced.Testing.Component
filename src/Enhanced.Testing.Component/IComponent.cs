@@ -69,8 +69,9 @@ public interface IComponent
     HttpClient CreateDefaultClient(Uri baseAddress, params DelegatingHandler[] handlers);
 
     /// <summary>
-    ///     Start the container harnesses concurrently, then the other dependencies in registration order, then the
-    ///     application.
+    ///     Start the container harnesses concurrently (except those with
+    ///     <see cref="ContainerHarness{TContainer}.StartConcurrently" /> set to <see langword="false" />), wait for all
+    ///     of them, then start the other dependencies in registration order, then the application.
     ///     If starting fails, everything started so far is stopped before the exception is rethrown.
     ///     A component can be started only once.
     /// </summary>

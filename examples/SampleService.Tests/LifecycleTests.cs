@@ -364,10 +364,129 @@ public class LifecycleTests
                                         .AddHarness(second)
                                         .Build();
 
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => component.StartAsync(cts.Token));
+        var exception =
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => component.StartAsync(cts.Token));
 
+        Assert.Equal(cts.Token, exception.CancellationToken);
         Assert.Equal(1, first.DisposeCount);
         Assert.Equal(1, second.DisposeCount);
+    }
+
+    [Fact]
+    public async Task ShouldReportContainerStartCancellationNotRequestedByCallerAsFailure()
+    {
+        var timeout = new TaskCanceledException("Container start timed out.");
+        var failure = new InvalidOperationException("Container failed to start.");
+        var healthy = new FakeContainerHarness(_ => Task.CompletedTask);
+        var component = ComponentBuilder.Create<Program>()
+                                        .AddHarness(new FakeContainerHarness(_ => throw timeout))
+                                        .AddHarness(healthy)
+                                        .AddHarness(new FakeContainerHarness(_ => throw failure))
+                                        .Build();
+
+        var exception = await Assert.ThrowsAsync<AggregateException>(() => component.StartAsync(default));
+
+        Assert.Equal([timeout, failure], exception.InnerExceptions);
+        Assert.Equal(1, healthy.DisposeCount);
+    }
+
+    [Fact]
+    public async Task ShouldRethrowSingleContainerStartCancellationNotRequestedByCaller()
+    {
+        var timeout = new TaskCanceledException("Container start timed out.");
+        var component = ComponentBuilder.Create<Program>()
+                                        .AddHarness(new FakeContainerHarness(_ => Task.CompletedTask))
+                                        .AddHarness(new FakeContainerHarness(_ => throw timeout))
+                                        .Build();
+
+        var exception = await Assert.ThrowsAsync<TaskCanceledException>(() => component.StartAsync(default));
+
+        Assert.Same(timeout, exception);
+    }
+
+    [Fact]
+    public async Task ShouldPreferFailureOverCallerCancellationOfParallelStarts()
+    {
+        using var cts = new CancellationTokenSource();
+        var failure = new InvalidOperationException("Container failed to start.");
+        var waitingEntered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var waiting = new FakeContainerHarness(async ct =>
+        {
+            waitingEntered.SetResult();
+            await Task.Delay(Timeout.Infinite, ct);
+        });
+        var failing = new FakeContainerHarness(async _ =>
+        {
+            await waitingEntered.Task.WaitAsync(TimeSpan.FromSeconds(30));
+            await cts.CancelAsync();
+            throw failure;
+        });
+        var component = ComponentBuilder.Create<Program>()
+                                        .AddHarness(waiting)
+                                        .AddHarness(failing)
+                                        .Build();
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => component.StartAsync(cts.Token));
+
+        Assert.Same(failure, exception);
+        Assert.Equal(1, waiting.DisposeCount);
+        Assert.Equal(1, failing.DisposeCount);
+    }
+
+    [Fact]
+    public async Task ShouldNotStartContainerHarnessRegisteredTwiceConcurrently()
+    {
+        var starts = 0;
+        var harness = new FakeContainerHarness(_ =>
+        {
+            Interlocked.Increment(ref starts);
+            return Task.CompletedTask;
+        });
+        var component = ComponentBuilder.Create<Program>()
+                                        .AddHarness(harness)
+                                        .AddHarness(harness)
+                                        .Build();
+
+        await Assert.ThrowsAsync<NotSupportedException>(() => component.StartAsync(default));
+
+        Assert.Equal(1, starts);
+        Assert.Equal(1, harness.DisposeCount);
+    }
+
+    [Fact]
+    public async Task ShouldStartContainerHarnessInRegistrationOrderWhenNotConcurrent()
+    {
+        var events = new List<string>();
+        var first = new FakeContainerHarness(_ =>
+        {
+            events.Add("container");
+            return Task.CompletedTask;
+        });
+        var dependent = new FakeContainerHarness(_ =>
+        {
+            events.Add(first.Started ? "dependent container" : "dependent container before container");
+            return Task.CompletedTask;
+        })
+        {
+            StartConcurrently = false
+        };
+        var component = ComponentBuilder.Create<Program>()
+                                        .AddDependency(new DelegateDependency(onStart: () => events.Add("dependency")))
+                                        .AddHarness(dependent)
+                                        .AddHarness(first)
+                                        .Build();
+
+        try
+        {
+            await component.StartAsync(default);
+        }
+        finally
+        {
+            await component.StopAsync(default);
+        }
+
+        Assert.Equal(["container", "dependency", "dependent container"], events);
+        Assert.Equal(1, dependent.DisposeCount);
     }
 
     [Fact]

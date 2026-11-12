@@ -84,8 +84,9 @@ PostgreSQL, Kafka and Redis run as real containers via [Testcontainers](https://
 several containers does not add up. It then starts the other harnesses in the order they were added, and finally the
 application. If anything fails to start, everything started so far is stopped again. `StopAsync` stops the application
 first, then the harnesses in reverse order, and removes their containers. Add a harness after the harnesses it depends
-on (for example, `DbContextHarness` after `PostgreSqlHarness`); a container harness must not depend on another harness
-while it starts.
+on (for example, `DbContextHarness` after `PostgreSqlHarness`). A container harness that needs another harness while it
+starts (for example, a container connecting to another container) must be created with `StartConcurrently = false`;
+it is then started with the other harnesses in the order it was added.
 
 ### Clients for the application under test
 
