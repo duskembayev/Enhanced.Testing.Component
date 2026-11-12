@@ -1,4 +1,4 @@
-using System.Diagnostics;
+using DotNet.Testcontainers.Containers;
 using Testcontainers.Kafka;
 
 namespace Enhanced.Testing.Component.Kafka;
@@ -35,7 +35,13 @@ public class KafkaHarness : ContainerHarness<KafkaContainer>
 
         foreach (var topic in Topics)
         {
-            await CreateTopicAsync(topic, cancellationToken).ConfigureAwait(false);
+            var result = await ExecCreateTopicAsync(topic, cancellationToken).ConfigureAwait(false);
+
+            if (result.ExitCode != 0)
+            {
+                throw new InvalidOperationException(
+                    $"Failed to create Kafka topic '{topic}' (exit code {result.ExitCode}): {result.Stderr.Trim()}");
+            }
         }
     }
 
@@ -66,16 +72,17 @@ public class KafkaHarness : ContainerHarness<KafkaContainer>
     /// </returns>
     public async Task<bool> CreateTopicAsync(string topicName, CancellationToken cancellationToken = default)
     {
-        string[] cmd = ["kafka-topics", "--create", "--bootstrap-server", "127.0.0.1:9093", "--topic", topicName];
-        var result = await Container.ExecAsync(cmd, cancellationToken).ConfigureAwait(false);
-
-        if (result.ExitCode != 0)
-        {
-            Debug.Fail($"Failed to create topic {topicName}: {result.Stderr}");
-            return false;
-        }
-
-        Debug.WriteLine(result.Stdout);
+        var result = await ExecCreateTopicAsync(topicName, cancellationToken).ConfigureAwait(false);
         return result.ExitCode == 0;
+    }
+
+    private Task<ExecResult> ExecCreateTopicAsync(string topicName, CancellationToken cancellationToken)
+    {
+        string[] cmd =
+        [
+            "kafka-topics", "--create", "--bootstrap-server", $"127.0.0.1:{KafkaBuilder.BrokerPort}", "--topic", topicName
+        ];
+
+        return Container.ExecAsync(cmd, cancellationToken);
     }
 }

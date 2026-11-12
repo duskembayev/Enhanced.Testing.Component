@@ -19,5 +19,5 @@ internal sealed class ComponentBuilder<TEntryPoint> : IComponentBuilder where TE
         return this;
     }
 
-    public IComponent Build() => new Component<TEntryPoint>(_appFactory, _dependencies);
+    public IComponent Build() => new Component<TEntryPoint>(_appFactory, _dependencies.ToArray());
 }

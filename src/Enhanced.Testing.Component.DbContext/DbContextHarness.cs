@@ -38,6 +38,7 @@ public class DbContextHarness<TContext> : Harness where TContext : Microsoft.Ent
     public async Task ExecuteAsync(Func<TContext, Task> action, CancellationToken cancellationToken = default)
     {
         ThrowIfComponentNotStarted();
+        cancellationToken.ThrowIfCancellationRequested();
 
         var scope = Component.Services.CreateAsyncScope();
 
@@ -66,6 +67,7 @@ public class DbContextHarness<TContext> : Harness where TContext : Microsoft.Ent
     public async Task<T> ExecuteAsync<T>(Func<TContext, Task<T>> action, CancellationToken cancellationToken = default)
     {
         ThrowIfComponentNotStarted();
+        cancellationToken.ThrowIfCancellationRequested();
 
         var scope = Component.Services.CreateAsyncScope();
 
@@ -87,7 +89,7 @@ public class DbContextHarness<TContext> : Harness where TContext : Microsoft.Ent
         ThrowIfComponentNotStarted();
 
         using var serviceScope = Component.Services.CreateScope();
-        using var context = serviceScope.ServiceProvider.GetRequiredService<TContext>();
+        var context = serviceScope.ServiceProvider.GetRequiredService<TContext>();
         action(context);
     }
 
@@ -108,7 +110,7 @@ public class DbContextHarness<TContext> : Harness where TContext : Microsoft.Ent
         ThrowIfComponentNotStarted();
 
         using var serviceScope = Component.Services.CreateScope();
-        using var context = serviceScope.ServiceProvider.GetRequiredService<TContext>();
+        var context = serviceScope.ServiceProvider.GetRequiredService<TContext>();
         return action(context);
     }
 

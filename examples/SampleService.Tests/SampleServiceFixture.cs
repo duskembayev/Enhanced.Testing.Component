@@ -27,6 +27,7 @@ public class SampleServiceFixture : IAsyncLifetime
         PeopleDb = new DbContextHarness<PeopleDbContext>();
         PeopleDb.EnsureCreatedOnStart(builder => builder.UseNpgsql(PostgreSql.GetConnectionString()));
         PeopleKafkaConsumer = new KafkaConsumerHarness<string, string>(Kafka) { Topic = GreeterService.KafkaTopic };
+        PeopleKafkaProducer = new KafkaProducerHarness<string, string>(Kafka) { Topic = GreeterService.KafkaTopic };
         RedisDatabase = new RedisDatabaseHarness(Redis);
 
         _component = ComponentBuilder.Create<Program>()
@@ -37,6 +38,7 @@ public class SampleServiceFixture : IAsyncLifetime
                                      .AddHarness(Redis)
                                      .AddHarness(PeopleDb)
                                      .AddHarness(PeopleKafkaConsumer)
+                                     .AddHarness(PeopleKafkaProducer)
                                      .AddHarness(RedisDatabase)
                                      .Build();
     }
@@ -54,6 +56,8 @@ public class SampleServiceFixture : IAsyncLifetime
     public DbContextHarness<PeopleDbContext> PeopleDb { get; }
 
     public KafkaConsumerHarness<string, string> PeopleKafkaConsumer { get; }
+
+    public KafkaProducerHarness<string, string> PeopleKafkaProducer { get; }
 
     public RedisDatabaseHarness RedisDatabase { get; }
 

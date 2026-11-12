@@ -50,7 +50,7 @@ public class SampleTests(SampleServiceFixture fixture) : IClassFixture<SampleSer
 
         await client.SayHelloAsync(new HelloRequest { Name = "Alice" });
 
-        var message = fixture.PeopleKafkaConsumer.ConsumeMessage(500);
+        var message = fixture.PeopleKafkaConsumer.ConsumeMessage(5000);
 
         Assert.NotNull(message);
         Assert.Equal("Alice", message.Key);
@@ -69,5 +69,19 @@ public class SampleTests(SampleServiceFixture fixture) : IClassFixture<SampleSer
         var value = fixture.RedisDatabase.Database.StringGet("Leo");
 
         Assert.Equal(3, value);
+    }
+
+    [Fact]
+    public async Task ShouldProduceMessageWithHarness()
+    {
+        fixture.PeopleKafkaConsumer.SeekToEnd();
+
+        await fixture.PeopleKafkaProducer.ProduceAsync("Bob", "Hello Bob");
+
+        var message = fixture.PeopleKafkaConsumer.ConsumeMessage(5000);
+
+        Assert.NotNull(message);
+        Assert.Equal("Bob", message.Key);
+        Assert.Equal("Hello Bob", message.Value);
     }
 }
