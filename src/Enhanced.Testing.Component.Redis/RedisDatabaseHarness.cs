@@ -64,10 +64,23 @@ public class RedisDatabaseHarness(ContainerHarness<RedisContainer> redisHarness)
     /// <inheritdoc />
     protected override async Task OnStop(CancellationToken cancellationToken)
     {
-        if (_multiplexer != null)
+        var multiplexer = _multiplexer;
+
+        if (multiplexer is null)
         {
-            await _multiplexer.CloseAsync(false).ConfigureAwait(false);
-            await _multiplexer.DisposeAsync().ConfigureAwait(false);
+            return;
+        }
+
+        _multiplexer = null;
+        _database = null;
+
+        try
+        {
+            await multiplexer.CloseAsync(false).ConfigureAwait(false);
+        }
+        finally
+        {
+            await multiplexer.DisposeAsync().ConfigureAwait(false);
         }
     }
 }

@@ -7,7 +7,9 @@ internal sealed class Component<TEntryPoint> : IComponent where TEntryPoint : cl
 {
     private readonly WebApplicationFactory<TEntryPoint> _appFactory;
     private readonly IReadOnlyList<IComponentDependency> _dependencies;
-    private bool _started;
+    private readonly List<IComponentDependency> _startedDependencies = [];
+    private bool _appDisposed;
+    private ComponentState _state;
 
     public Component(WebApplicationFactory<TEntryPoint> appFactory, IReadOnlyList<IComponentDependency> dependencies)
     {
@@ -61,35 +63,95 @@ internal sealed class Component<TEntryPoint> : IComponent where TEntryPoint : cl
 
     public async Task StartAsync(CancellationToken cancellationToken)
     {
-        for (var i = 0; i < _dependencies.Count; i++)
+        if (_state != ComponentState.Created)
         {
-            await _dependencies[i].OnStartAsync(this, cancellationToken).ConfigureAwait(false);
+            throw new InvalidOperationException("The component can be started only once.");
         }
 
-        _ = _appFactory.Server;
-        _started = true;
+        _state = ComponentState.Starting;
+
+        try
+        {
+            foreach (var dependency in _dependencies)
+            {
+                _startedDependencies.Add(dependency);
+                await dependency.OnStartAsync(this, cancellationToken).ConfigureAwait(false);
+            }
+
+            cancellationToken.ThrowIfCancellationRequested();
+
+            _ = _appFactory.Server;
+            _state = ComponentState.Started;
+        }
+        catch (Exception startException)
+        {
+            try
+            {
+                await StopAsync(CancellationToken.None).ConfigureAwait(false);
+            }
+            catch (Exception stopException)
+            {
+                throw new AggregateException(
+                    "The component failed to start and could not be stopped cleanly.",
+                    startException,
+                    stopException);
+            }
+
+            throw;
+        }
     }
 
     public async Task StopAsync(CancellationToken cancellationToken)
     {
-        _started = false;
+        if (_state == ComponentState.Stopped)
+        {
+            return;
+        }
+
+        _state = ComponentState.Stopping;
 
         List<Exception>? exceptions = null;
+        var cancelled = false;
 
-        try
+        if (!_appDisposed)
         {
-            await _appFactory.DisposeAsync().ConfigureAwait(false);
-        }
-        catch (Exception e)
-        {
-            (exceptions ??= []).Add(e);
+            if (cancellationToken.IsCancellationRequested)
+            {
+                cancelled = true;
+            }
+            else
+            {
+                try
+                {
+                    await _appFactory.DisposeAsync().ConfigureAwait(false);
+                }
+                catch (Exception e)
+                {
+                    (exceptions ??= []).Add(e);
+                }
+                finally
+                {
+                    _appDisposed = true;
+                }
+            }
         }
 
-        for (var i = _dependencies.Count - 1; i >= 0; i--)
+        for (var i = _startedDependencies.Count - 1; i >= 0 && !cancelled; i--)
         {
+            if (cancellationToken.IsCancellationRequested)
+            {
+                cancelled = true;
+                break;
+            }
+
             try
             {
-                await _dependencies[i].OnStopAsync(this, cancellationToken).ConfigureAwait(false);
+                await _startedDependencies[i].OnStopAsync(this, cancellationToken).ConfigureAwait(false);
+                _startedDependencies.RemoveAt(i);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                cancelled = true;
             }
             catch (Exception e)
             {
@@ -106,13 +168,35 @@ internal sealed class Component<TEntryPoint> : IComponent where TEntryPoint : cl
         {
             throw new AggregateException("One or more errors occurred while stopping the component.", exceptions);
         }
+
+        if (cancelled)
+        {
+            throw new OperationCanceledException(cancellationToken);
+        }
+
+        _state = ComponentState.Stopped;
     }
 
     private void ThrowIfComponentNotStarted()
     {
-        if (!_started)
+        switch (_state)
         {
-            throw new InvalidOperationException("The component has not been started.");
+            case ComponentState.Started:
+                return;
+            case ComponentState.Stopping:
+            case ComponentState.Stopped:
+                throw new InvalidOperationException("The component has been stopped.");
+            default:
+                throw new InvalidOperationException("The component has not been started.");
         }
+    }
+
+    private enum ComponentState
+    {
+        Created,
+        Starting,
+        Started,
+        Stopping,
+        Stopped
     }
 }

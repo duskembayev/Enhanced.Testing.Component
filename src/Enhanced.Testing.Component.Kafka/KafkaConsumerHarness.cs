@@ -149,8 +149,24 @@ public class KafkaConsumerHarness<TKey, TValue>(KafkaHarness kafkaHarness) : Har
     /// <inheritdoc />
     protected override Task OnStop(CancellationToken cancellationToken)
     {
-        _consumer?.Close();
-        _consumer?.Dispose();
+        var consumer = _consumer;
+
+        if (consumer is null)
+        {
+            return Task.CompletedTask;
+        }
+
+        _consumer = null;
+
+        try
+        {
+            consumer.Close();
+        }
+        finally
+        {
+            consumer.Dispose();
+        }
+
         return Task.CompletedTask;
     }
 }

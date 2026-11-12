@@ -23,6 +23,7 @@ public class GrpcClientHarness : Harness
     public TClient CreateClient<TClient>()
         where TClient : ClientBase
     {
+        ThrowIfComponentNotStarted();
         var channel = _channels.GetOrAdd(typeof(TClient), _ => CreateGrpcChannel());
         return (TClient)Activator.CreateInstance(typeof(TClient), channel)!;
     }
@@ -38,12 +39,21 @@ public class GrpcClientHarness : Harness
     /// <inheritdoc />
     protected override async Task OnStop(CancellationToken cancellationToken)
     {
-        foreach (var channel in _channels.Values)
+        foreach (var type in _channels.Keys)
         {
-            await channel.ShutdownAsync().ConfigureAwait(false);
-            channel.Dispose();
-        }
+            if (!_channels.TryRemove(type, out var channel))
+            {
+                continue;
+            }
 
-        _channels.Clear();
+            try
+            {
+                await channel.ShutdownAsync().ConfigureAwait(false);
+            }
+            finally
+            {
+                channel.Dispose();
+            }
+        }
     }
 }
