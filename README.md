@@ -15,7 +15,8 @@ The solution includes harnesses for the following components:
 - **Redis**: Provides support for both Redis and RedisStack, allowing for easy integration of Redis services into your
   tests.
   [![NuGet](https://img.shields.io/nuget/v/Enhanced.Testing.Component.Redis)](https://www.nuget.org/packages/Enhanced.Testing.Component.Redis)
-- **Kafka**: A harness for setting up a Kafka broker for message-based integration testing.
+- **Kafka**: Harnesses for a Kafka broker (Confluent, Apache Kafka native or Redpanda) for message-based integration
+  testing.
   [![NuGet](https://img.shields.io/nuget/v/Enhanced.Testing.Component.Kafka)](https://www.nuget.org/packages/Enhanced.Testing.Component.Kafka)
 - **gRPC Client**: Simplifies the process of testing gRPC services by providing a client harness.
   [![NuGet](https://img.shields.io/nuget/v/Enhanced.Testing.Component.GrpcClient)](https://www.nuget.org/packages/Enhanced.Testing.Component.GrpcClient)
@@ -92,8 +93,18 @@ without opening network ports.
 
 - `DbContextHarness<TContext>` creates the schema on start (`EnsureCreatedOnStart`) and runs queries against the
   application's database (`ExecuteAsync`).
-- `KafkaHarness` creates topics on start (`Topics`). `KafkaProducerHarness` sends messages to the application, and
-  `KafkaConsumerHarness` reads what it produced (`SeekToEnd`, `ConsumeMessage`).
+- `KafkaHarness` and `RedpandaHarness` create topics on start (`Topics`; existing topics are kept) and wait until they
+  have a partition leader. `KafkaProducerHarness` sends messages to the application, and `KafkaConsumerHarness` reads
+  what it produced. The consumer is positioned at the end of the topic on start; prefer waiting for *your* message
+  over reading the next one, so messages left by other tests or a slow producer don't make the test flaky:
+
+  ```csharp
+  var message = await consumer.WaitForKeyAsync("order-42", TimeSpan.FromSeconds(10));
+  var result = await consumer.WaitForMessageAsync(r => r.Message.Value.Contains("42"), TimeSpan.FromSeconds(10));
+  ```
+
+  Non-matching messages are skipped; a `TimeoutException` reports how many. `SeekToBeginning`/`SeekToEnd` move the
+  position the wait starts from.
 - `RedisDatabaseHarness` gives direct access to the Redis database (`Database`).
 
 ### Configuring containers
@@ -108,6 +119,18 @@ var postgreSql = new PostgreSqlHarness
         .WithEnvironment("TZ", "UTC")
         .WithResourceMapping("init.sql", "/docker-entrypoint-initdb.d/")
 };
+```
+
+Any Kafka-compatible broker works with the producer and consumer harnesses (they accept `IKafkaHarness`).
+`KafkaHarness` uses `apache/kafka-native` (a GraalVM build of Apache Kafka) by default: it starts fastest and has the
+smallest image. Use `KafkaHarness.ConfluentImage` for the Confluent Platform image, or `RedpandaHarness` for
+applications that run Redpanda in production:
+
+```csharp
+var kafka = new KafkaHarness { Topics = ["orders"] };
+var confluent = new KafkaHarness { Image = KafkaHarness.ConfluentImage, Topics = ["orders"] };
+var redpanda = new RedpandaHarness { Topics = ["orders"], ConnectionName = "Kafka" };
+var consumer = new KafkaConsumerHarness<string, string>(redpanda) { Topic = "orders" };
 ```
 
 ### Custom harnesses

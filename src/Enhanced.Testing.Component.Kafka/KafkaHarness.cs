@@ -1,4 +1,3 @@
-using DotNet.Testcontainers.Containers;
 using Testcontainers.Kafka;
 
 namespace Enhanced.Testing.Component.Kafka;
@@ -6,12 +5,26 @@ namespace Enhanced.Testing.Component.Kafka;
 /// <summary>
 ///     A Kafka harness.
 /// </summary>
-public class KafkaHarness : ContainerHarness<KafkaContainer>
+/// <remarks>
+///     Confluent (<c>confluentinc/cp-kafka</c>) and Apache (<c>apache/kafka</c>, <c>apache/kafka-native</c>) images are
+///     supported; the vendor is detected from the image name.
+/// </remarks>
+public class KafkaHarness : ContainerHarness<KafkaContainer>, IKafkaHarness
 {
+    /// <summary>
+    ///     The Apache Kafka GraalVM native image. It starts faster and uses less memory than the JVM images.
+    /// </summary>
+    public const string NativeImage = "apache/kafka-native:4.4.0";
+
+    /// <summary>
+    ///     The Confluent Platform Kafka image.
+    /// </summary>
+    public const string ConfluentImage = "confluentinc/cp-kafka:7.6.1";
+
     /// <summary>
     ///     The default container image.
     /// </summary>
-    public const string DefaultImage = "confluentinc/cp-kafka:7.6.1";
+    public const string DefaultImage = NativeImage;
 
     /// <summary>
     ///     The container image.
@@ -24,7 +37,7 @@ public class KafkaHarness : ContainerHarness<KafkaContainer>
     public Func<KafkaBuilder, KafkaBuilder>? ConfigureContainer { get; init; }
 
     /// <summary>
-    ///     The topics to create.
+    ///     The topics to create on start. Topics that already exist are left as is.
     /// </summary>
     public IList<string> Topics { get; init; } = [];
 
@@ -35,17 +48,12 @@ public class KafkaHarness : ContainerHarness<KafkaContainer>
 
         foreach (var topic in Topics)
         {
-            var result = await ExecCreateTopicAsync(topic, cancellationToken).ConfigureAwait(false);
-
-            if (result.ExitCode != 0)
-            {
-                throw new InvalidOperationException(
-                    $"Failed to create Kafka topic '{topic}' (exit code {result.ExitCode}): {result.Stderr.Trim()}");
-            }
+            await KafkaTopicAdmin.EnsureTopicAsync(GetConnectionString(), topic, cancellationToken)
+                                 .ConfigureAwait(false);
         }
     }
 
-    /// <inheritdoc />
+    /// <inheritdoc cref="IKafkaHarness.GetConnectionString" />
     public override string GetConnectionString()
     {
         return $"{Container.Hostname}:{Container.GetMappedPublicPort(KafkaBuilder.KafkaPort)}";
@@ -59,7 +67,7 @@ public class KafkaHarness : ContainerHarness<KafkaContainer>
     }
 
     /// <summary>
-    ///     Creates topics.
+    ///     Creates a topic and waits until its partitions have a leader.
     /// </summary>
     /// <param name="topicName">
     ///     The topic name.
@@ -72,17 +80,7 @@ public class KafkaHarness : ContainerHarness<KafkaContainer>
     /// </returns>
     public async Task<bool> CreateTopicAsync(string topicName, CancellationToken cancellationToken = default)
     {
-        var result = await ExecCreateTopicAsync(topicName, cancellationToken).ConfigureAwait(false);
-        return result.ExitCode == 0;
-    }
-
-    private Task<ExecResult> ExecCreateTopicAsync(string topicName, CancellationToken cancellationToken)
-    {
-        string[] cmd =
-        [
-            "kafka-topics", "--create", "--bootstrap-server", $"127.0.0.1:{KafkaBuilder.BrokerPort}", "--topic", topicName
-        ];
-
-        return Container.ExecAsync(cmd, cancellationToken);
+        return await KafkaTopicAdmin.TryCreateTopicAsync(GetConnectionString(), topicName, cancellationToken)
+                                    .ConfigureAwait(false);
     }
 }
