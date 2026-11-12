@@ -15,7 +15,8 @@ The solution includes harnesses for the following components:
 - **Redis**: Provides support for both Redis and RedisStack, allowing for easy integration of Redis services into your
   tests.
   [![NuGet](https://img.shields.io/nuget/v/Enhanced.Testing.Component.Redis)](https://www.nuget.org/packages/Enhanced.Testing.Component.Redis)
-- **Kafka**: A harness for setting up a Kafka broker for message-based integration testing.
+- **Kafka**: Harnesses for a Kafka broker (Confluent, Apache Kafka native or Redpanda) for message-based integration
+  testing.
   [![NuGet](https://img.shields.io/nuget/v/Enhanced.Testing.Component.Kafka)](https://www.nuget.org/packages/Enhanced.Testing.Component.Kafka)
 - **gRPC Client**: Simplifies the process of testing gRPC services by providing a client harness.
   [![NuGet](https://img.shields.io/nuget/v/Enhanced.Testing.Component.GrpcClient)](https://www.nuget.org/packages/Enhanced.Testing.Component.GrpcClient)
@@ -93,8 +94,18 @@ without opening network ports.
 
 - `DbContextHarness<TContext>` creates the schema on start (`EnsureCreatedOnStart`) and runs queries against the
   application's database (`ExecuteAsync`).
-- `KafkaHarness` creates topics on start (`Topics`). `KafkaProducerHarness` sends messages to the application, and
-  `KafkaConsumerHarness` reads what it produced (`SeekToEnd`, `ConsumeMessage`).
+- `KafkaHarness` and `RedpandaHarness` create topics on start (`Topics`; existing topics are kept) and wait until they
+  have a partition leader. `KafkaProducerHarness` sends messages to the application, and `KafkaConsumerHarness` reads
+  what it produced. The consumer is positioned at the end of the topic on start; prefer waiting for *your* message
+  over reading the next one, so messages left by other tests or a slow producer don't make the test flaky:
+
+  ```csharp
+  var message = await consumer.WaitForKeyAsync("order-42", TimeSpan.FromSeconds(10));
+  var result = await consumer.WaitForMessageAsync(r => r.Message.Value.Contains("42"), TimeSpan.FromSeconds(10));
+  ```
+
+  Non-matching messages are skipped; a `TimeoutException` reports how many. `SeekToBeginning`/`SeekToEnd` move the
+  position the wait starts from.
 - `RedisDatabaseHarness` gives direct access to the Redis database (`Database`).
 
 ### Per-test PostgreSQL databases from a template
@@ -138,7 +149,20 @@ var postgreSql = new PostgreSqlHarness
 };
 ```
 
-`ConfigureContainer` runs after the harness has applied its own settings, so it can override any of them.
+`ConfigureContainer` runs after the harness has applied its own settings, so it can override them (except the
+`RedisHarness` persistence arguments described below).
+
+Any Kafka-compatible broker works with the producer and consumer harnesses (they accept `IKafkaHarness`).
+`KafkaHarness` uses `apache/kafka-native` (a GraalVM build of Apache Kafka) by default: it starts fastest and has the
+smallest image. Use `KafkaHarness.ConfluentImage` for the Confluent Platform image, or `RedpandaHarness` for
+applications that run Redpanda in production:
+
+```csharp
+var kafka = new KafkaHarness { Topics = ["orders"] };
+var confluent = new KafkaHarness { Image = KafkaHarness.ConfluentImage, Topics = ["orders"] };
+var redpanda = new RedpandaHarness { Topics = ["orders"], ConnectionName = "Kafka" };
+var consumer = new KafkaConsumerHarness<string, string>(redpanda) { Topic = "orders" };
+```
 
 ### Fast, non-durable databases
 
@@ -155,10 +179,13 @@ expects the data to survive, or when the database is too large to keep in memory
 var postgreSql = new PostgreSqlHarness { Durable = true };
 ```
 
-`RedisHarness` passes `--save "" --appendonly no` as the container command and `RedisStackHarness` sets the
-`REDIS_ARGS` environment variable. `WithCommand` in `ConfigureContainer` appends to these arguments, so further
-`--option value` pairs work, but a command that starts with `redis-server` does not: set `Durable = true` in that case.
-Setting `REDIS_ARGS` yourself replaces the harness value.
+`PostgreSqlHarness` mounts tmpfs at `/var/lib/postgresql/data`; if `ConfigureContainer` mounts a volume or bind mount
+there, Docker rejects the duplicate mount point, so set `Durable = true` in that case.
+
+`RedisHarness` appends `--save "" --appendonly no` to the container command after `ConfigureContainer` has run, so a
+custom command (`redis-server /usr/local/etc/redis/redis.conf` or extra `--option value` pairs) keeps working, but its
+`save` and `appendonly` settings are overridden unless `Durable = true`. `RedisStackHarness` sets the `REDIS_ARGS`
+environment variable instead; setting `REDIS_ARGS` yourself replaces the harness value.
 
 ### Reusing containers between local runs
 
@@ -182,7 +209,10 @@ Use it for local runs only, never in CI:
   earlier runs. Write tests that don't depend on an empty database, or remove the container after a schema change.
 - A container is matched by a hash of its configuration (image, environment, command, labels and so on). Harnesses with
   the same configuration share one container, including test classes that run in parallel and test runs for several
-  target frameworks. Give a harness its own container by adding a label:
+  target frameworks (starts are serialized through a lock file in the temporary directory, so parallel processes
+  don't create duplicates). Such harnesses also share their data. If Testcontainers still finds two matching containers
+  ("Sequence contains more than one element"), remove them with the command above. Give a harness its own container by
+  adding a label:
   `ConfigureContainer = builder => builder.WithLabel("reuse-scope", "orders-tests")`.
 - Changing the configuration creates a new container. The old one keeps running until you remove it.
 

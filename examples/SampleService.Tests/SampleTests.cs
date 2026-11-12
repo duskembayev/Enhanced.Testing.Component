@@ -5,6 +5,8 @@ namespace SampleService.Tests;
 
 public class SampleTests(SampleServiceFixture fixture) : IClassFixture<SampleServiceFixture>
 {
+    private static readonly TimeSpan MessageTimeout = TimeSpan.FromSeconds(10);
+
     [Fact]
     public async Task ShouldBeHealthy()
     {
@@ -44,16 +46,12 @@ public class SampleTests(SampleServiceFixture fixture) : IClassFixture<SampleSer
     [Fact]
     public async Task ShouldProduceMessage()
     {
-        fixture.PeopleKafkaConsumer.SeekToEnd();
-
         var client = fixture.GrpcClient.CreateClient<Greeter.GreeterClient>();
 
         await client.SayHelloAsync(new HelloRequest { Name = "Alice" });
 
-        var message = fixture.PeopleKafkaConsumer.ConsumeMessage(5000);
+        var message = await fixture.PeopleKafkaConsumer.WaitForKeyAsync("Alice", MessageTimeout);
 
-        Assert.NotNull(message);
-        Assert.Equal("Alice", message.Key);
         Assert.Equal("Alice", message.Value);
     }
 
@@ -74,14 +72,10 @@ public class SampleTests(SampleServiceFixture fixture) : IClassFixture<SampleSer
     [Fact]
     public async Task ShouldProduceMessageWithHarness()
     {
-        fixture.PeopleKafkaConsumer.SeekToEnd();
-
         await fixture.PeopleKafkaProducer.ProduceAsync("Bob", "Hello Bob");
 
-        var message = fixture.PeopleKafkaConsumer.ConsumeMessage(5000);
+        var message = await fixture.PeopleKafkaConsumer.WaitForKeyAsync("Bob", MessageTimeout);
 
-        Assert.NotNull(message);
-        Assert.Equal("Bob", message.Key);
         Assert.Equal("Hello Bob", message.Value);
     }
 }
