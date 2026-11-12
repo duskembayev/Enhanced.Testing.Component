@@ -232,4 +232,42 @@ public static class KafkaConsumerHarnessExtensions
     /// </typeparam>
     public static void SeekToEnd<TKey, TValue>(this KafkaConsumerHarness<TKey, TValue> consumer) =>
         consumer.Seek(Offset.End);
+
+    /// <summary>
+    ///     Waits for a message with the specified key, skipping messages with other keys.
+    /// </summary>
+    /// <param name="consumer">
+    ///     The Kafka consumer.
+    /// </param>
+    /// <param name="key">
+    ///     The message key.
+    /// </param>
+    /// <param name="timeout">
+    ///     The maximum time to wait for the message.
+    /// </param>
+    /// <param name="cancellationToken">
+    ///     The cancellation token.
+    /// </param>
+    /// <typeparam name="TKey">
+    ///     The message key type.
+    /// </typeparam>
+    /// <typeparam name="TValue">
+    ///     The message value type.
+    /// </typeparam>
+    /// <returns>
+    ///     The first message with the key.
+    /// </returns>
+    /// <exception cref="TimeoutException">
+    ///     Thrown when no message with the key arrives within <paramref name="timeout" />.
+    /// </exception>
+    public static async Task<Message<TKey, TValue>> WaitForKeyAsync<TKey, TValue>(
+        this KafkaConsumerHarness<TKey, TValue> consumer, TKey key, TimeSpan timeout,
+        CancellationToken cancellationToken = default)
+    {
+        var comparer = EqualityComparer<TKey>.Default;
+        var result = await consumer.WaitForMessageAsync(r => comparer.Equals(r.Message.Key, key), timeout,
+            cancellationToken).ConfigureAwait(false);
+
+        return result.Message;
+    }
 }
