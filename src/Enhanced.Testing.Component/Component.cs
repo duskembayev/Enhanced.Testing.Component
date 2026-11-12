@@ -1,3 +1,4 @@
+using System.Runtime.ExceptionServices;
 using Microsoft.AspNetCore.TestHost;
 
 namespace Enhanced.Testing.Component;
@@ -71,13 +72,40 @@ internal sealed class Component<TEntryPoint> : IComponent where TEntryPoint : cl
 
     public async Task StopAsync(CancellationToken cancellationToken)
     {
-        for (var i = _dependencies.Count - 1; i >= 0; i--)
+        _started = false;
+
+        List<Exception>? exceptions = null;
+
+        try
         {
-            await _dependencies[i].OnStopAsync(this, cancellationToken).ConfigureAwait(false);
+            await _appFactory.DisposeAsync().ConfigureAwait(false);
+        }
+        catch (Exception e)
+        {
+            (exceptions ??= []).Add(e);
         }
 
-        await _appFactory.DisposeAsync().ConfigureAwait(false);
-        _started = false;
+        for (var i = _dependencies.Count - 1; i >= 0; i--)
+        {
+            try
+            {
+                await _dependencies[i].OnStopAsync(this, cancellationToken).ConfigureAwait(false);
+            }
+            catch (Exception e)
+            {
+                (exceptions ??= []).Add(e);
+            }
+        }
+
+        if (exceptions is { Count: 1 })
+        {
+            ExceptionDispatchInfo.Throw(exceptions[0]);
+        }
+
+        if (exceptions is not null)
+        {
+            throw new AggregateException("One or more errors occurred while stopping the component.", exceptions);
+        }
     }
 
     private void ThrowIfComponentNotStarted()
