@@ -10,7 +10,7 @@ public class RedisStackHarness : ContainerHarness<RedisContainer>
     /// <summary>
     ///     The default container image.
     /// </summary>
-    public const string DefaultImage = "redis/redis-stack-server:latest";
+    public const string DefaultImage = "redis/redis-stack-server:7.4.0-v8";
 
     /// <summary>
     ///     The container image.
