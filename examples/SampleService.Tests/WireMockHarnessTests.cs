@@ -81,6 +81,42 @@ public class WireMockHarnessTests : IAsyncLifetime
         await Assert.ThrowsAsync<HttpRequestException>(() => client.GetAsync("/__admin/mappings"));
     }
 
+    [Fact]
+    public async Task ShouldStartNewServerWhenReusedByAnotherComponent()
+    {
+        var harness = new WireMockHarness { ConfigurationKey = "QuotesApi:BaseUrl" };
+        var first = ComponentBuilder.Create<Program>().AddHarness(harness).Build();
+        await first.StartAsync(default);
+        harness.Server
+               .Given(Request.Create().WithPath("/quote").UsingGet())
+               .RespondWith(Response.Create().WithBody("quote"));
+        await first.StopAsync(default);
+
+        var second = ComponentBuilder.Create<Program>().AddHarness(harness).Build();
+        await second.StartAsync(default);
+
+        try
+        {
+            var configuration = second.Services.GetRequiredService<IConfiguration>();
+            Assert.Equal(harness.Server.Url, configuration["QuotesApi:BaseUrl"]);
+            Assert.Empty(harness.Server.Mappings);
+        }
+        finally
+        {
+            await second.StopAsync(default);
+        }
+    }
+
+    [Fact]
+    public void ShouldFailClearlyWhenConfiguredBeforeStart()
+    {
+        var harness = new WireMockHarness { ConfigurationKey = "QuotesApi:BaseUrl" };
+
+        var exception = Assert.Throws<InvalidOperationException>(() => harness.OnConfigure(null!));
+
+        Assert.Contains("QuotesApi:BaseUrl", exception.Message);
+    }
+
     Task IAsyncLifetime.InitializeAsync() => _component.StartAsync(default);
 
     Task IAsyncLifetime.DisposeAsync() => _component.StopAsync(default);

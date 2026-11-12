@@ -18,6 +18,8 @@ The solution includes harnesses for the following components:
 - **Kafka**: Harnesses for a Kafka broker (Confluent, Apache Kafka native or Redpanda) for message-based integration
   testing.
   [![NuGet](https://img.shields.io/nuget/v/Enhanced.Testing.Component.Kafka)](https://www.nuget.org/packages/Enhanced.Testing.Component.Kafka)
+- **WireMock**: Hosts an in-process WireMock.Net server that fakes external HTTP services.
+  [![NuGet](https://img.shields.io/nuget/v/Enhanced.Testing.Component.WireMock)](https://www.nuget.org/packages/Enhanced.Testing.Component.WireMock)
 - **gRPC Client**: Simplifies the process of testing gRPC services by providing a client harness.
   [![NuGet](https://img.shields.io/nuget/v/Enhanced.Testing.Component.GrpcClient)](https://www.nuget.org/packages/Enhanced.Testing.Component.GrpcClient)
 - **HTTP Client**: Offers a harness for testing HTTP-based services and APIs.
