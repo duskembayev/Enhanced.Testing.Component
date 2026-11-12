@@ -40,7 +40,7 @@ public class HarnessTests
     }
 
     [Theory]
-    [InlineData(KafkaHarness.DefaultImage)]
+    [InlineData(KafkaHarness.ConfluentImage)]
     [InlineData(KafkaHarness.NativeImage)]
     [InlineData(RedpandaHarness.DefaultImage)]
     public async Task ShouldFailToStartWhenTopicCannotBeCreated(string image)

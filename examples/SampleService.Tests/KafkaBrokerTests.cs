@@ -46,12 +46,12 @@ public abstract class KafkaBrokerFixture : IAsyncLifetime
 
 public sealed class ConfluentKafkaFixture() : KafkaBrokerFixture(new KafkaHarness
 {
-    Topics = [Topic], ConnectionName = ConnectionName
+    Image = KafkaHarness.ConfluentImage, Topics = [Topic], ConnectionName = ConnectionName
 });
 
 public sealed class NativeKafkaFixture() : KafkaBrokerFixture(new KafkaHarness
 {
-    Image = KafkaHarness.NativeImage, Topics = [Topic], ConnectionName = ConnectionName
+    Topics = [Topic], ConnectionName = ConnectionName
 });
 
 public sealed class RedpandaFixture() : KafkaBrokerFixture(new RedpandaHarness

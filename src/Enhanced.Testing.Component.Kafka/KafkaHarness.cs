@@ -12,14 +12,19 @@ namespace Enhanced.Testing.Component.Kafka;
 public class KafkaHarness : ContainerHarness<KafkaContainer>, IKafkaHarness
 {
     /// <summary>
-    ///     The default container image.
-    /// </summary>
-    public const string DefaultImage = "confluentinc/cp-kafka:7.6.1";
-
-    /// <summary>
     ///     The Apache Kafka GraalVM native image. It starts faster and uses less memory than the JVM images.
     /// </summary>
     public const string NativeImage = "apache/kafka-native:4.4.0";
+
+    /// <summary>
+    ///     The Confluent Platform Kafka image.
+    /// </summary>
+    public const string ConfluentImage = "confluentinc/cp-kafka:7.6.1";
+
+    /// <summary>
+    ///     The default container image.
+    /// </summary>
+    public const string DefaultImage = NativeImage;
 
     /// <summary>
     ///     The container image.

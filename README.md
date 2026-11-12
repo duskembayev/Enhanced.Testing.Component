@@ -121,13 +121,14 @@ var postgreSql = new PostgreSqlHarness
 };
 ```
 
-Any Kafka-compatible broker works with the producer and consumer harnesses (they accept `IKafkaHarness`). The default
-`confluentinc/cp-kafka` image matches the Confluent Platform. `KafkaHarness.NativeImage` (`apache/kafka-native`, a
-GraalVM build of Apache Kafka) starts fastest and uses less memory, which suits local runs and CI. `RedpandaHarness`
-runs Redpanda, for applications that use it in production:
+Any Kafka-compatible broker works with the producer and consumer harnesses (they accept `IKafkaHarness`).
+`KafkaHarness` uses `apache/kafka-native` (a GraalVM build of Apache Kafka) by default: it starts fastest and has the
+smallest image. Use `KafkaHarness.ConfluentImage` for the Confluent Platform image, or `RedpandaHarness` for
+applications that run Redpanda in production:
 
 ```csharp
-var kafka = new KafkaHarness { Image = KafkaHarness.NativeImage, Topics = ["orders"] };
+var kafka = new KafkaHarness { Topics = ["orders"] };
+var confluent = new KafkaHarness { Image = KafkaHarness.ConfluentImage, Topics = ["orders"] };
 var redpanda = new RedpandaHarness { Topics = ["orders"], ConnectionName = "Kafka" };
 var consumer = new KafkaConsumerHarness<string, string>(redpanda) { Topic = "orders" };
 ```
