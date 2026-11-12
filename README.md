@@ -95,6 +95,8 @@ without opening network ports.
 - `KafkaHarness` creates topics on start (`Topics`). `KafkaProducerHarness` sends messages to the application, and
   `KafkaConsumerHarness` reads what it produced (`SeekToEnd`, `ConsumeMessage`).
 - `RedisDatabaseHarness` gives direct access to the Redis database (`Database`).
+- `TimeProviderHarness` (`Enhanced.Testing.Component.Time`) replaces the application's `TimeProvider` with a
+  `FakeTimeProvider`, so timeouts, retries, TTLs and timers run instantly (`Advance`, `SetUtcNow`).
 
 ### Configuring containers
 

@@ -6,6 +6,7 @@ var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddGrpc();
 builder.Services.AddHealthChecks();
+builder.Services.AddSingleton(TimeProvider.System);
 
 builder.Services.AddDbContext<PeopleDbContext>(options =>
 {
@@ -16,6 +17,13 @@ builder.Services.AddDbContext<PeopleDbContext>(options =>
 var app = builder.Build();
 
 app.MapHealthChecks("/health");
+app.MapGet("/time", (TimeProvider timeProvider) => timeProvider.GetUtcNow());
+app.MapGet("/delay/{seconds:int}",
+    async (int seconds, TimeProvider timeProvider) =>
+    {
+        await Task.Delay(TimeSpan.FromSeconds(seconds), timeProvider);
+        return timeProvider.GetUtcNow();
+    });
 app.MapGrpcService<GreeterService>();
 app.MapGet("/",
     () =>
