@@ -1,5 +1,4 @@
 using DotNet.Testcontainers.Containers;
-using Microsoft.Extensions.Configuration;
 
 namespace Enhanced.Testing.Component;
 
@@ -22,7 +21,13 @@ public abstract class ContainerHarness<TContainer> : Harness
         get
         {
             ThrowIfComponentNotStarted();
-            return _container!;
+
+            if (_container is null)
+            {
+                throw new InvalidOperationException("The container is not running.");
+            }
+
+            return _container;
         }
     }
 
@@ -52,10 +57,16 @@ public abstract class ContainerHarness<TContainer> : Harness
     /// <inheritdoc />
     protected override async Task OnStop(CancellationToken cancellationToken)
     {
-        if (_container is not null)
+        var container = _container;
+
+        if (container is null)
         {
-            await _container.StopAsync(cancellationToken).ConfigureAwait(false);
+            return;
         }
+
+        _container = default;
+
+        await container.DisposeAsync().AsTask().WaitAsync(cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>
