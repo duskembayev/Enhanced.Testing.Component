@@ -11,6 +11,8 @@ namespace Enhanced.Testing.Component;
 public abstract class ContainerHarness<TContainer> : Harness
     where TContainer : IContainer
 {
+    private static readonly SemaphoreSlim ReuseLock = new(1, 1);
+
     private TContainer? _container;
 
     /// <summary>
@@ -36,6 +38,21 @@ public abstract class ContainerHarness<TContainer> : Harness
     /// </summary>
     public string? ConnectionName { get; init; }
 
+    /// <summary>
+    ///     Reuses a running container with the same configuration and keeps the container running when the harness
+    ///     stops. Intended for local development only. Ignored by harnesses that don't support reuse
+    ///     (see <see cref="SupportsReuse" />).
+    /// </summary>
+    public bool Reuse { get; init; }
+
+    /// <summary>
+    ///     Whether <see cref="OnCreateContainer" /> passes <see cref="Reuse" /> to the container builder
+    ///     (<c>WithReuse</c>).
+    /// </summary>
+    protected virtual bool SupportsReuse => false;
+
+    private bool IsReused => Reuse && SupportsReuse;
+
     /// <inheritdoc />
     public override void OnConfigure(IWebHostBuilder webHostBuilder)
     {
@@ -51,7 +68,23 @@ public abstract class ContainerHarness<TContainer> : Harness
     protected override async Task OnStart(CancellationToken cancellationToken)
     {
         _container = OnCreateContainer();
-        await _container.StartAsync(cancellationToken).ConfigureAwait(false);
+
+        if (!IsReused)
+        {
+            await _container.StartAsync(cancellationToken).ConfigureAwait(false);
+            return;
+        }
+
+        await ReuseLock.WaitAsync(cancellationToken).ConfigureAwait(false);
+
+        try
+        {
+            await _container.StartAsync(cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            ReuseLock.Release();
+        }
     }
 
     /// <inheritdoc />
@@ -62,7 +95,11 @@ public abstract class ContainerHarness<TContainer> : Harness
             return;
         }
 
-        await _container.DisposeAsync().ConfigureAwait(false);
+        if (!IsReused)
+        {
+            await _container.DisposeAsync().ConfigureAwait(false);
+        }
+
         _container = default;
     }
 

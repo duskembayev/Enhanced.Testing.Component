@@ -29,6 +29,9 @@ public class RedisHarness : ContainerHarness<RedisContainer>
     public bool Durable { get; init; }
 
     /// <inheritdoc />
+    protected override bool SupportsReuse => true;
+
+    /// <inheritdoc />
     public override string GetConnectionString() =>
         $"{Container.Hostname}:{Container.GetMappedPublicPort(RedisBuilder.RedisPort)}";
 
@@ -40,6 +43,11 @@ public class RedisHarness : ContainerHarness<RedisContainer>
         if (!Durable)
         {
             builder = builder.WithCommand("--save", "", "--appendonly", "no");
+        }
+
+        if (Reuse)
+        {
+            builder = builder.WithReuse(true);
         }
 
         return (ConfigureContainer?.Invoke(builder) ?? builder).Build();

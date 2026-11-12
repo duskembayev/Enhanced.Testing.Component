@@ -53,6 +53,9 @@ public class PostgreSqlHarness : ContainerHarness<PostgreSqlContainer>
     public IDictionary<string, string> ConnectionProperties { get; init; } = new Dictionary<string, string>();
 
     /// <inheritdoc />
+    protected override bool SupportsReuse => true;
+
+    /// <inheritdoc />
     public override string GetConnectionString()
     {
         var builder = new DbConnectionStringBuilder();
@@ -82,6 +85,11 @@ public class PostgreSqlHarness : ContainerHarness<PostgreSqlContainer>
         builder = Durable
             ? builder.WithCommand("-c", "fsync=on", "-c", "full_page_writes=on", "-c", "synchronous_commit=on")
             : builder.WithEnvironment("PGDATA", DataDirectory).WithTmpfsMount(DataDirectory);
+
+        if (Reuse)
+        {
+            builder = builder.WithReuse(true);
+        }
 
         return (ConfigureContainer?.Invoke(builder) ?? builder).Build();
     }

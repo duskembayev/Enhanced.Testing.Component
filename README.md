@@ -80,7 +80,8 @@ PostgreSQL, Kafka and Redis run as real containers via [Testcontainers](https://
 ### Managed lifecycle
 
 `StartAsync` starts the harnesses in the order they were added, then the application. `StopAsync` stops the
-application first, then the harnesses in reverse order, and removes their containers. Add a harness after the
+application first, then the harnesses in reverse order, and removes their containers (except
+[reused](#reusing-containers-between-local-runs) ones). Add a harness after the
 harnesses it depends on (for example, `DbContextHarness` after `PostgreSqlHarness`).
 
 ### Clients for the application under test
@@ -132,7 +133,35 @@ var postgreSql = new PostgreSqlHarness { Durable = true };
 `--option value` pairs work, but a command that starts with `redis-server` does not: set `Durable = true` in that case.
 Setting `REDIS_ARGS` yourself replaces the harness value.
 
+### Reusing containers between local runs
+
+For a faster edit-and-run loop on your machine, set `Reuse = true` on `PostgreSqlHarness`, `RedisHarness` or
+`RedisStackHarness`. The harness then uses Testcontainers' reuse feature: the first run creates the container, `StopAsync`
+leaves it running, and later runs attach to it instead of starting a new one. On a warm run PostgreSQL is ready in
+under 100 ms instead of 1–2 s.
+
+```csharp
+var postgreSql = new PostgreSqlHarness
+{
+    Reuse = Environment.GetEnvironmentVariable("CI") is null
+};
+```
+
+Use it for local runs only, never in CI:
+
+- Reused containers are not removed by Testcontainers' resource reaper (Ryuk). They keep running until you remove
+  them: `docker rm -f $(docker ps -aq --filter label=org.testcontainers.reuse-hash)`.
+- Data survives between runs. `EnsureCreated` doesn't update an existing schema, and tests see rows written by
+  earlier runs. Write tests that don't depend on an empty database, or remove the container after a schema change.
+- A container is matched by a hash of its configuration (image, environment, command, labels and so on). Harnesses with
+  the same configuration share one container, including test classes that run in parallel and test runs for several
+  target frameworks. Give a harness its own container by adding a label:
+  `ConfigureContainer = builder => builder.WithLabel("reuse-scope", "orders-tests")`.
+- Changing the configuration creates a new container. The old one keeps running until you remove it.
+
 ### Custom harnesses
 
 Derive from `Harness` (override `OnConfigure`, `OnStart`, `OnStop`) to plug in any dependency, or from
-`ContainerHarness<TContainer>` (override `OnCreateContainer`, `GetConnectionString`) for any Testcontainers module.
+`ContainerHarness<TContainer>` (override `OnCreateContainer`, `GetConnectionString`) for any Testcontainers module. To
+support `Reuse`, call `WithReuse(Reuse)` on the builder in `OnCreateContainer` and override `SupportsReuse` to return
+`true`.
