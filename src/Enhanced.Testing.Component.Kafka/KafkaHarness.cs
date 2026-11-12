@@ -9,6 +9,21 @@ namespace Enhanced.Testing.Component.Kafka;
 public class KafkaHarness : ContainerHarness<KafkaContainer>
 {
     /// <summary>
+    ///     The default container image.
+    /// </summary>
+    public const string DefaultImage = "confluentinc/cp-kafka:7.6.1";
+
+    /// <summary>
+    ///     The container image.
+    /// </summary>
+    public string Image { get; init; } = DefaultImage;
+
+    /// <summary>
+    ///     Customizes the container builder before the container is built.
+    /// </summary>
+    public Func<KafkaBuilder, KafkaBuilder>? ConfigureContainer { get; init; }
+
+    /// <summary>
     ///     The topics to create.
     /// </summary>
     public IList<string> Topics { get; init; } = [];
@@ -33,8 +48,8 @@ public class KafkaHarness : ContainerHarness<KafkaContainer>
     /// <inheritdoc />
     protected override KafkaContainer OnCreateContainer()
     {
-        return new KafkaBuilder("confluentinc/cp-kafka:7.6.1")
-            .Build();
+        var builder = new KafkaBuilder(Image);
+        return (ConfigureContainer?.Invoke(builder) ?? builder).Build();
     }
 
     /// <summary>

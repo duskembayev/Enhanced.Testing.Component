@@ -41,23 +41,14 @@ Below is an example of how to set up a test fixture using the PostgreSQL harness
 ```csharp
 public class MyServiceFixture : IAsyncLifetime
 {
-    public HttpClientHarness HttpClient { get; private set; }
-    public PostgreSqlHarness PostgreSql { get; private set; }
-    public DbContextHarness<PeopleDbContext> PeopleDb { get; private set; }
-
-    private IComponent _component;
+    private readonly IComponent _component;
 
     public MyServiceFixture()
     {
         HttpClient = new HttpClientHarness();
-        PostgreSql = new PostgreSqlHarness()
-        {
-            ConnectionName = "PeopleDb"
-        };
-        PeopleDb = new DbContextHarness<PeopleDbContext>
-        {
-            EnsureCreated = true
-        };
+        PostgreSql = new PostgreSqlHarness { ConnectionName = "PeopleDb" };
+        PeopleDb = new DbContextHarness<PeopleDbContext>();
+        PeopleDb.EnsureCreatedOnStart(builder => builder.UseNpgsql(PostgreSql.GetConnectionString()));
 
         _component = ComponentBuilder.Create<Program>()
                                      .AddHarness(HttpClient)
@@ -66,14 +57,60 @@ public class MyServiceFixture : IAsyncLifetime
                                      .Build();
     }
 
-    public async Task InitializeAsync()
-    {
-        await _component.StartAsync();
-    }
+    public HttpClientHarness HttpClient { get; }
 
-    public async Task DisposeAsync()
-    {
-        await _component.StopAsync();
-    }
+    public PostgreSqlHarness PostgreSql { get; }
+
+    public DbContextHarness<PeopleDbContext> PeopleDb { get; }
+
+    public Task InitializeAsync() => _component.StartAsync(CancellationToken.None);
+
+    public Task DisposeAsync() => _component.StopAsync(CancellationToken.None);
 }
 ```
+
+## Features
+
+### Real dependencies in Docker
+
+PostgreSQL, Kafka and Redis run as real containers via [Testcontainers](https://dotnet.testcontainers.org/). Set
+`ConnectionName` on a container harness and its connection string is passed to the application under test as
+`ConnectionStrings:{ConnectionName}`, so the app needs no test-specific configuration.
+
+### Managed lifecycle
+
+`StartAsync` starts the harnesses in the order they were added, then the application. `StopAsync` stops the
+application first, then the harnesses in reverse order, and removes their containers. Add a harness after the
+harnesses it depends on (for example, `DbContextHarness` after `PostgreSqlHarness`).
+
+### Clients for the application under test
+
+`HttpClientHarness` and `GrpcClientHarness` create clients that call the application in memory through `TestServer`,
+without opening network ports.
+
+### Test data and assertions
+
+- `DbContextHarness<TContext>` creates the schema on start (`EnsureCreatedOnStart`) and runs queries against the
+  application's database (`ExecuteAsync`).
+- `KafkaHarness` creates topics on start (`Topics`). `KafkaProducerHarness` sends messages to the application, and
+  `KafkaConsumerHarness` reads what it produced (`SeekToEnd`, `ConsumeMessage`).
+- `RedisDatabaseHarness` gives direct access to the Redis database (`Database`).
+
+### Configuring containers
+
+Container harnesses let you override the image and customize the underlying Testcontainers builder:
+
+```csharp
+var postgreSql = new PostgreSqlHarness
+{
+    Image = "postgres:17",
+    ConfigureContainer = builder => builder
+        .WithEnvironment("TZ", "UTC")
+        .WithResourceMapping("init.sql", "/docker-entrypoint-initdb.d/")
+};
+```
+
+### Custom harnesses
+
+Derive from `Harness` (override `OnConfigure`, `OnStart`, `OnStop`) to plug in any dependency, or from
+`ContainerHarness<TContainer>` (override `OnCreateContainer`, `GetConnectionString`) for any Testcontainers module.
