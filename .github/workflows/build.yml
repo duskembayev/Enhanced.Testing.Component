@@ -34,6 +34,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          fetch-depth: 0
           persist-credentials: false
 
       - name: Setup .NET
@@ -45,31 +46,53 @@ jobs:
             10.0.x
             11.0.x
 
-      - name: Resolve version
+      - name: Resolve package validation baseline
         shell: bash
         env:
           VERSION: ${{ inputs.version }}
         run: |
-          if [ -z "$VERSION" ]; then
-            exit 0
-          fi
-          if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+          if [ -n "$VERSION" ] && ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
             echo "::error::Invalid version '$VERSION'"
             exit 1
           fi
-          echo "VERSION_ARGS=-p:Version=$VERSION" >> "$GITHUB_ENV"
+          exclude=(--exclude 'v*-*')
+          if [ -n "$VERSION" ]; then
+            exclude+=(--exclude "v$VERSION")
+          fi
+          if baseline=$(git describe --tags --abbrev=0 --match 'v[0-9]*.[0-9]*.[0-9]*' "${exclude[@]}" 2>/dev/null); then
+            echo "Package validation baseline: ${baseline#v}"
+            echo "PackageValidationBaselineVersion=${baseline#v}" >> "$GITHUB_ENV"
+          else
+            echo "::warning::No previous release tag found, package validation is skipped"
+          fi
 
       - name: Restore
         run: dotnet restore
 
       - name: Build
-        run: dotnet build --configuration Release --no-restore ${VERSION_ARGS:+"$VERSION_ARGS"}
+        run: dotnet build --configuration Release --no-restore
 
       - name: Test
         run: dotnet test --configuration Release --no-build --logger "console;verbosity=normal"
 
       - name: Pack
-        run: dotnet pack --configuration Release --no-build --output artifacts ${VERSION_ARGS:+"$VERSION_ARGS"}
+        run: dotnet pack --configuration Release --no-build --output artifacts
+
+      - name: Verify package version
+        if: inputs.version != ''
+        shell: bash
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          shopt -s nullglob
+          mismatched=()
+          for package in artifacts/*.nupkg; do
+            [[ "$package" == *".$VERSION.nupkg" ]] || mismatched+=("$package")
+          done
+          if [ ${#mismatched[@]} -gt 0 ]; then
+            echo "::error::Packages do not match version $VERSION: ${mismatched[*]}"
+            exit 1
+          fi
 
       - name: Upload packages
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
