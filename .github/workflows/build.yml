@@ -32,12 +32,12 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          fetch-depth: 0
+          persist-credentials: false
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@v6
+        uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
         with:
           dotnet-version: |
             8.0.x
@@ -46,28 +46,33 @@ jobs:
             11.0.x
 
       - name: Resolve version
-        id: version
         shell: bash
+        env:
+          VERSION: ${{ inputs.version }}
         run: |
-          version="${{ inputs.version }}"
-          if [ -n "$version" ]; then
-            echo "args=-p:Version=$version" >> "$GITHUB_OUTPUT"
+          if [ -z "$VERSION" ]; then
+            exit 0
           fi
+          if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+            echo "::error::Invalid version '$VERSION'"
+            exit 1
+          fi
+          echo "VERSION_ARGS=-p:Version=$VERSION" >> "$GITHUB_ENV"
 
       - name: Restore
         run: dotnet restore
 
       - name: Build
-        run: dotnet build --configuration Release --no-restore ${{ steps.version.outputs.args }}
+        run: dotnet build --configuration Release --no-restore ${VERSION_ARGS:+"$VERSION_ARGS"}
 
       - name: Test
         run: dotnet test --configuration Release --no-build --logger "console;verbosity=normal"
 
       - name: Pack
-        run: dotnet pack --configuration Release --no-build --output artifacts ${{ steps.version.outputs.args }}
+        run: dotnet pack --configuration Release --no-build --output artifacts ${VERSION_ARGS:+"$VERSION_ARGS"}
 
       - name: Upload packages
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: packages
           path: |
