@@ -133,6 +133,21 @@ var redpanda = new RedpandaHarness { Topics = ["orders"], ConnectionName = "Kafk
 var consumer = new KafkaConsumerHarness<string, string>(redpanda) { Topic = "orders" };
 ```
 
+### Customizing the application under test
+
+Remove background work the test does not need, or host the application through your own `WebApplicationFactory`
+subclass (for example, one that overrides `CreateHost` or `ConfigureWebHost`):
+
+```csharp
+var component = ComponentBuilder.Create(new MyApplicationFactory())
+                                .RemoveHostedService<OutboxPublisher>()
+                                .AddHarness(httpClient)
+                                .Build();
+```
+
+`RemoveHostedService<TService>` runs after the application's own registrations, so it removes hosted services added
+in `Program` (and by `Configure` calls made before it). The component does not dispose a factory passed to `Create`.
+
 ### Custom harnesses
 
 Derive from `Harness` (override `OnConfigure`, `OnStart`, `OnStop`) to plug in any dependency, or from
