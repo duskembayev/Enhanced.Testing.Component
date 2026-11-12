@@ -110,6 +110,28 @@ var postgreSql = new PostgreSqlHarness
 };
 ```
 
+`ConfigureContainer` runs after the harness has applied its own settings, so it can override any of them.
+
+### Fast, non-durable databases
+
+Test data does not need to survive a crash, so container harnesses trade durability for speed by default:
+
+- `PostgreSqlHarness` keeps the data directory (`PGDATA`) on tmpfs and runs with `fsync`, `full_page_writes` and
+  `synchronous_commit` off. Nothing is written to disk, which reduces IO load when many containers run in parallel.
+- `RedisHarness` and `RedisStackHarness` disable persistence (no RDB snapshots, no append-only file).
+
+Set `Durable = true` to get the image's durable behaviour instead, for example when a test restarts the server and
+expects the data to survive, or when the database is too large to keep in memory:
+
+```csharp
+var postgreSql = new PostgreSqlHarness { Durable = true };
+```
+
+`RedisHarness` passes `--save "" --appendonly no` as the container command and `RedisStackHarness` sets the
+`REDIS_ARGS` environment variable. `WithCommand` in `ConfigureContainer` appends to these arguments, so further
+`--option value` pairs work, but a command that starts with `redis-server` does not: set `Durable = true` in that case.
+Setting `REDIS_ARGS` yourself replaces the harness value.
+
 ### Custom harnesses
 
 Derive from `Harness` (override `OnConfigure`, `OnStart`, `OnStop`) to plug in any dependency, or from
