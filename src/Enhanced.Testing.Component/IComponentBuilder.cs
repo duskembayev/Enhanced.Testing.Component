@@ -28,7 +28,7 @@ public interface IComponentBuilder
     IComponentBuilder Configure(Action<IWebHostBuilder> configuration);
 
     /// <summary>
-    ///     Builds the component.
+    ///     Builds the component. A builder can build only one component.
     /// </summary>
     /// <returns>
     ///     The instance of the <see cref="IComponent" />.
