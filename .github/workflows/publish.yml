@@ -21,14 +21,27 @@ jobs:
       version: ${{ steps.version.outputs.version }}
       prerelease: ${{ steps.version.outputs.prerelease }}
     steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Verify tag is on a release branch
+        shell: bash
+        run: |
+          if ! git branch --remotes --contains "$GITHUB_SHA" | grep -qE '^\s*origin/(main|release/.+)$'; then
+            echo "::error::Tag '$GITHUB_REF_NAME' points to a commit that is not on main or a release/* branch"
+            exit 1
+          fi
+
       - name: Parse tag
         id: version
         shell: bash
         run: |
-          tag="${GITHUB_REF_NAME}"
-          version="${tag#v}"
+          version="${GITHUB_REF_NAME#v}"
           if ! [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
-            echo "::error::Tag '$tag' is not a valid version (expected vX.Y.Z or vX.Y.Z-suffix)"
+            echo "::error::Tag '$GITHUB_REF_NAME' is not a valid version (expected vX.Y.Z or vX.Y.Z-suffix)"
             exit 1
           fi
           echo "version=$version" >> "$GITHUB_OUTPUT"
@@ -47,46 +60,60 @@ jobs:
 
   publish:
     name: Publish to nuget.org
-    needs: [version, build]
+    needs: build
     runs-on: ubuntu-latest
     environment:
       name: nuget
       url: https://www.nuget.org/profiles/${{ vars.NUGET_USER }}
     permissions:
-      contents: write # create the GitHub release
-      id-token: write # NuGet trusted publishing (OIDC)
+      id-token: write
 
     steps:
       - name: Download packages
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: packages
           path: artifacts
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@v6
+        uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
         with:
           dotnet-version: 10.0.x
 
       - name: NuGet login (trusted publishing)
         id: login
-        uses: NuGet/login@v1
+        uses: NuGet/login@8d196754b4036150537f80ac539e15c2f1028841 # v1.2.0
         with:
           user: ${{ vars.NUGET_USER }}
 
       - name: Push to nuget.org
+        env:
+          NUGET_API_KEY: ${{ steps.login.outputs.NUGET_API_KEY }}
         run: >
           dotnet nuget push "artifacts/*.nupkg"
-          --api-key "${{ steps.login.outputs.NUGET_API_KEY }}"
+          --api-key "$NUGET_API_KEY"
           --source https://api.nuget.org/v3/index.json
           --skip-duplicate
 
-      - name: Create GitHub release
+  release:
+    name: Create GitHub release
+    needs: [version, publish]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download packages
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: packages
+          path: artifacts
+
+      - name: Create release
         env:
           GH_TOKEN: ${{ github.token }}
-          VERSION: ${{ needs.version.outputs.version }}
           PRERELEASE: ${{ needs.version.outputs.prerelease }}
         run: |
-          flags=(--repo "$GITHUB_REPOSITORY" --title "v$VERSION" --generate-notes --verify-tag)
+          flags=(--repo "$GITHUB_REPOSITORY" --title "$GITHUB_REF_NAME" --generate-notes --verify-tag)
           if [ "$PRERELEASE" = "true" ]; then flags+=(--prerelease); fi
           gh release create "$GITHUB_REF_NAME" artifacts/*.nupkg artifacts/*.snupkg "${flags[@]}"
