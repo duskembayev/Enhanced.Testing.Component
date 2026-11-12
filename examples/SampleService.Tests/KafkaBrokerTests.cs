@@ -126,6 +126,56 @@ public abstract class KafkaBrokerTests<TFixture>(TFixture fixture) : IClassFixtu
     }
 
     [Fact]
+    public async Task ShouldIsolateConcurrentTestsWithUniqueTopics()
+    {
+        var results = await Task.WhenAll(RunIsolatedScenarioAsync("first"), RunIsolatedScenarioAsync("second"));
+
+        Assert.Equal(["first", "second"], results);
+    }
+
+    [Fact]
+    public async Task ShouldFindEarlierMessageInUniqueTopicAfterSeekToBeginning()
+    {
+        var topic = await fixture.Broker.CreateUniqueTopicAsync("seek");
+
+        using var producer = fixture.Broker.CreateProducer<string, string>(topic);
+        await producer.ProduceAsync("key", "earlier");
+
+        using var consumer = await fixture.Broker.CreateConsumerAsync<string, string>(topic);
+        consumer.SeekToBeginning();
+
+        var message = await consumer.WaitForKeyAsync("key", MessageTimeout);
+
+        Assert.Equal("earlier", message.Value);
+    }
+
+    [Fact]
+    public async Task ShouldCreateUniqueTopicsWithPrefix()
+    {
+        var first = await fixture.Broker.CreateUniqueTopicAsync("orders");
+        var second = await fixture.Broker.CreateUniqueTopicAsync("orders");
+
+        Assert.StartsWith("orders-", first);
+        Assert.NotEqual(first, second);
+    }
+
+    private async Task<string> RunIsolatedScenarioAsync(string value)
+    {
+        var topic = await fixture.Broker.CreateUniqueTopicAsync("isolated");
+
+        using var consumer = await fixture.Broker.CreateConsumerAsync<string, string>(topic);
+        using var producer = fixture.Broker.CreateProducer<string, string>(topic);
+
+        await producer.ProduceAsync("order-1", value);
+
+        var result = await consumer.WaitForMessageAsync(_ => true, MessageTimeout);
+
+        Assert.Equal(topic, consumer.Topic);
+        Assert.Equal("order-1", result.Message.Key);
+        return result.Message.Value;
+    }
+
+    [Fact]
     public void ShouldPassConnectionStringToApplication()
     {
         var configuration = fixture.Services.GetRequiredService<IConfiguration>();

@@ -13,12 +13,8 @@ namespace Enhanced.Testing.Component.Kafka;
 /// </typeparam>
 public class KafkaConsumerHarness<TKey, TValue> : Harness
 {
-    private static readonly TimeSpan StartTimeout = TimeSpan.FromSeconds(30);
-    private static readonly TimeSpan QueryTimeout = TimeSpan.FromSeconds(5);
-    private static readonly TimeSpan RetryDelay = TimeSpan.FromMilliseconds(200);
-
     private readonly IKafkaHarness _kafkaHarness;
-    private IConsumer<TKey, TValue>? _consumer;
+    private KafkaTopicReader<TKey, TValue>? _reader;
 
     /// <summary>
     ///     Initializes a new instance of the <see cref="KafkaConsumerHarness{TKey, TValue}" /> class.
@@ -70,43 +66,7 @@ public class KafkaConsumerHarness<TKey, TValue> : Harness
     public void Seek(Offset offset, TimeSpan timeout)
     {
         ThrowIfComponentNotStarted();
-
-        if (timeout == Timeout.InfiniteTimeSpan)
-        {
-            timeout = StartTimeout;
-        }
-
-        var tp = new TopicPartition(Topic, 0);
-        var tpo = new TopicPartitionOffset(tp, offset);
-
-        if (offset == Offset.Beginning)
-        {
-            var queryWatermarkOffsets = _consumer!.QueryWatermarkOffsets(tp, timeout);
-
-            if (queryWatermarkOffsets is null)
-            {
-                throw new InvalidOperationException("Failed to query watermark offsets.");
-            }
-
-            tpo = new TopicPartitionOffset(tp, queryWatermarkOffsets.Low);
-        }
-        else if (offset == Offset.End)
-        {
-            var queryWatermarkOffsets = _consumer!.QueryWatermarkOffsets(tp, timeout);
-
-            if (queryWatermarkOffsets is null)
-            {
-                throw new InvalidOperationException("Failed to query watermark offsets.");
-            }
-
-            tpo = new TopicPartitionOffset(tp, queryWatermarkOffsets.High);
-        }
-        else if (offset.IsSpecial)
-        {
-            throw new NotSupportedException("Offset kind is not supported.");
-        }
-
-        _consumer!.Assign(tpo);
+        _reader!.Seek(offset, timeout);
     }
 
     /// <summary>
@@ -121,7 +81,7 @@ public class KafkaConsumerHarness<TKey, TValue> : Harness
     public ConsumeResult<TKey, TValue>? Consume(TimeSpan timeout)
     {
         ThrowIfComponentNotStarted();
-        return _consumer!.Consume(timeout);
+        return _reader!.Consumer.Consume(timeout);
     }
 
     /// <summary>
@@ -136,7 +96,7 @@ public class KafkaConsumerHarness<TKey, TValue> : Harness
     public ConsumeResult<TKey, TValue>? Consume(CancellationToken cancellationToken)
     {
         ThrowIfComponentNotStarted();
-        return _consumer!.Consume(cancellationToken);
+        return _reader!.Consumer.Consume(cancellationToken);
     }
 
     /// <summary>
@@ -151,7 +111,7 @@ public class KafkaConsumerHarness<TKey, TValue> : Harness
     public ConsumeResult<TKey, TValue>? Consume(int millisecondsTimeout = Timeout.Infinite)
     {
         ThrowIfComponentNotStarted();
-        return _consumer!.Consume(millisecondsTimeout);
+        return _reader!.Consumer.Consume(millisecondsTimeout);
     }
 
     /// <summary>
@@ -181,114 +141,22 @@ public class KafkaConsumerHarness<TKey, TValue> : Harness
         TimeSpan timeout, CancellationToken cancellationToken = default)
     {
         ThrowIfComponentNotStarted();
-        ArgumentNullException.ThrowIfNull(predicate);
-
-        var consumer = _consumer!;
-        return Task.Run(() => WaitForMessage(consumer, predicate, timeout, cancellationToken), cancellationToken);
+        return _reader!.WaitForMessageAsync(predicate, timeout, cancellationToken);
     }
 
     /// <inheritdoc />
     protected override async Task OnStart(CancellationToken cancellationToken)
     {
-        var consumerConfig = new ConsumerConfig
-        {
-            BootstrapServers = _kafkaHarness.GetConnectionString(),
-            GroupId = Guid.NewGuid().ToString("N"),
-            AllowAutoCreateTopics = false,
-            EnableAutoCommit = false,
-            AutoOffsetReset = AutoOffsetReset.Latest,
-            FetchWaitMaxMs = 50,
-            SocketNagleDisable = true
-        };
-
-        var consumerBuilder = new ConsumerBuilder<TKey, TValue>(consumerConfig)
-                              .SetKeyDeserializer(KeyDeserializer)
-                              .SetValueDeserializer(ValueDeserializer);
-
-        _consumer = consumerBuilder.Build();
-
-        var partition = new TopicPartition(Topic, 0);
-        var watermarks = await QueryWatermarkOffsetsAsync(_consumer, partition, cancellationToken).ConfigureAwait(false);
-
-        _consumer.Assign(new TopicPartitionOffset(partition, watermarks.High));
+        _reader = await KafkaTopicReader<TKey, TValue>.CreateAsync(_kafkaHarness.GetConnectionString(), Topic,
+            KeyDeserializer, ValueDeserializer, cancellationToken).ConfigureAwait(false);
     }
 
     /// <inheritdoc />
     protected override Task OnStop(CancellationToken cancellationToken)
     {
-        var consumer = _consumer;
-
-        if (consumer is null)
-        {
-            return Task.CompletedTask;
-        }
-
-        _consumer = null;
-
-        try
-        {
-            consumer.Close();
-        }
-        finally
-        {
-            consumer.Dispose();
-        }
-
+        var reader = _reader;
+        _reader = null;
+        reader?.Dispose();
         return Task.CompletedTask;
-    }
-
-    private ConsumeResult<TKey, TValue> WaitForMessage(IConsumer<TKey, TValue> consumer,
-        Func<ConsumeResult<TKey, TValue>, bool> predicate, TimeSpan timeout, CancellationToken cancellationToken)
-    {
-        using var timeoutSource = new CancellationTokenSource(timeout);
-        using var linkedSource = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeoutSource.Token);
-
-        var skipped = 0;
-
-        try
-        {
-            while (true)
-            {
-                var result = consumer.Consume(linkedSource.Token);
-
-                if (result is null || result.IsPartitionEOF)
-                {
-                    continue;
-                }
-
-                if (predicate(result))
-                {
-                    return result;
-                }
-
-                skipped++;
-            }
-        }
-        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
-        {
-            throw new TimeoutException(
-                $"No matching message arrived in topic '{Topic}' within {timeout.TotalMilliseconds:0} ms " +
-                $"({skipped} non-matching message(s) skipped).");
-        }
-    }
-
-    private static async Task<WatermarkOffsets> QueryWatermarkOffsetsAsync(IConsumer<TKey, TValue> consumer,
-        TopicPartition partition, CancellationToken cancellationToken)
-    {
-        var deadline = DateTime.UtcNow + StartTimeout;
-
-        while (true)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-
-            try
-            {
-                return consumer.QueryWatermarkOffsets(partition, QueryTimeout);
-            }
-            catch (KafkaException) when (DateTime.UtcNow < deadline)
-            {
-                await Task.Delay(RetryDelay, cancellationToken).ConfigureAwait(false);
-            }
-        }
     }
 }
