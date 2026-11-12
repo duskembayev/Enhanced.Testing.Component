@@ -1,15 +1,23 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
-
-    <PropertyGroup>
-        <TargetFramework>net8.0</TargetFramework>
-    </PropertyGroup>
+<Project Sdk="Microsoft.NET.Sdk">
 
     <ItemGroup>
       <ProjectReference Include="..\Enhanced.Testing.Component\Enhanced.Testing.Component.csproj" />
     </ItemGroup>
 
-    <ItemGroup>
-      <PackageReference Include="Microsoft.EntityFrameworkCore" Version="8.0.7" />
+    <ItemGroup Condition="'$(TargetFramework)' == 'net8.0'">
+      <PackageReference Include="Microsoft.EntityFrameworkCore" Version="8.0.34" />
+    </ItemGroup>
+
+    <ItemGroup Condition="'$(TargetFramework)' == 'net9.0'">
+      <PackageReference Include="Microsoft.EntityFrameworkCore" Version="9.0.23" />
+    </ItemGroup>
+
+    <ItemGroup Condition="'$(TargetFramework)' == 'net10.0'">
+      <PackageReference Include="Microsoft.EntityFrameworkCore" Version="10.0.15" />
+    </ItemGroup>
+
+    <ItemGroup Condition="'$(TargetFramework)' == 'net11.0'">
+      <PackageReference Include="Microsoft.EntityFrameworkCore" Version="11.0.0" />
     </ItemGroup>
 
 </Project>

@@ -43,7 +43,7 @@ public class PostgreSqlHarness : ContainerHarness<PostgreSqlContainer>
 
     /// <inheritdoc />
     protected override PostgreSqlContainer OnCreateContainer() =>
-        new PostgreSqlBuilder()
+        new PostgreSqlBuilder("postgres:15.1")
             .WithUsername(Username)
             .WithPassword(Password)
             .WithDatabase(Database)
