@@ -47,6 +47,40 @@ public class ComponentBuilderTests
     }
 
     [Fact]
+    public async Task ShouldKeepKeyedAndLaterRegistrationsOfHostedService()
+    {
+        var builder = ComponentBuilder.Create<Program>()
+                                      .Configure(webHost => webHost.ConfigureServices(services =>
+                                          services.AddKeyedSingleton<IHostedService, NoopHostedService>("keyed")))
+                                      .RemoveHostedService<NoopHostedService>()
+                                      .Configure(webHost => webHost.ConfigureServices(services =>
+                                          services.AddHostedService<NoopHostedService>()));
+
+        var component = builder.Build();
+
+        try
+        {
+            await component.StartAsync(default);
+
+            Assert.IsType<NoopHostedService>(component.Services.GetRequiredKeyedService<IHostedService>("keyed"));
+            Assert.Contains(component.Services.GetServices<IHostedService>(), service => service is NoopHostedService);
+        }
+        finally
+        {
+            await component.StopAsync(default);
+        }
+    }
+
+    [Fact]
+    public async Task ShouldIgnoreHostedServiceThatIsNotRegistered()
+    {
+        var hostedServices = await GetHostedServiceTypesAsync(ComponentBuilder.Create<Program>()
+                                                                              .RemoveHostedService<NoopHostedService>());
+
+        Assert.Contains(typeof(HeartbeatService), hostedServices);
+    }
+
+    [Fact]
     public async Task ShouldHostApplicationThroughCustomFactory()
     {
         await using var factory = new CustomApplicationFactory();
@@ -72,6 +106,34 @@ public class ComponentBuilderTests
         {
             await component.StopAsync(default);
         }
+
+        Assert.False(factory.Disposed);
+    }
+
+    [Fact]
+    public async Task ShouldCreateComponentsFromSameFactory()
+    {
+        await using var factory = new CustomApplicationFactory();
+
+        for (var i = 0; i < 2; i++)
+        {
+            var httpClient = new HttpClientHarness();
+            var component = ComponentBuilder.Create(factory).AddHarness(httpClient).Build();
+
+            try
+            {
+                await component.StartAsync(default);
+
+                var response = await httpClient.CreateClient().GetAsync("/health");
+                response.EnsureSuccessStatusCode();
+            }
+            finally
+            {
+                await component.StopAsync(default);
+            }
+        }
+
+        Assert.False(factory.Disposed);
     }
 
     [Fact]
@@ -98,6 +160,14 @@ public class ComponentBuilderTests
     private sealed class CustomApplicationFactory : WebApplicationFactory<Program>
     {
         public bool HostCreated { get; private set; }
+
+        public bool Disposed { get; private set; }
+
+        public override ValueTask DisposeAsync()
+        {
+            Disposed = true;
+            return base.DisposeAsync();
+        }
 
         protected override void ConfigureWebHost(IWebHostBuilder builder) =>
             builder.UseSetting("Sample:Factory", "factory");

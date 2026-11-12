@@ -28,8 +28,15 @@ public static class ComponentBuilderExtensions
     /// <summary>
     ///     Removes the hosted service of type <typeparamref name="TService" /> so it does not run during the test.
     ///     Registrations by type, instance and factory made by the application, or by builder configuration added
-    ///     before this call, are removed.
+    ///     before this call, are removed. Registrations added by builder configuration after this call are kept.
     /// </summary>
+    /// <remarks>
+    ///     Only non-keyed <see cref="IHostedService" /> registrations whose implementation type is exactly
+    ///     <typeparamref name="TService" /> are removed; derived types are kept. A factory registration is matched by
+    ///     the declared return type of the factory, as with
+    ///     <c>AddHostedService(sp =&gt; new TService(...))</c>; a factory declared to return
+    ///     <see cref="IHostedService" /> cannot be matched. If no registration matches, nothing is removed.
+    /// </remarks>
     /// <typeparam name="TService">
     ///     The exact implementation type of the hosted service.
     /// </typeparam>

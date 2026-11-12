@@ -146,7 +146,9 @@ var component = ComponentBuilder.Create(new MyApplicationFactory())
 ```
 
 `RemoveHostedService<TService>` runs after the application's own registrations, so it removes hosted services added
-in `Program` (and by `Configure` calls made before it). The component does not dispose a factory passed to `Create`.
+in `Program` (and by `Configure` calls made before it). It matches the exact implementation type of non-keyed
+registrations; a factory registration is matched only when the factory is declared to return `TService`, as
+`AddHostedService(sp => new OutboxPublisher(...))` is. The component does not dispose a factory passed to `Create`.
 
 ### Custom harnesses
 
