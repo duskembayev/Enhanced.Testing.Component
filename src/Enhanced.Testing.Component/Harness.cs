@@ -1,5 +1,3 @@
-using System.Diagnostics.CodeAnalysis;
-
 namespace Enhanced.Testing.Component;
 
 /// <summary>
@@ -8,16 +6,21 @@ namespace Enhanced.Testing.Component;
 public abstract class Harness : IHarness
 {
     private IComponent? _component;
+    private object? _owner;
 
     /// <summary>
     ///     The component.
     /// </summary>
+    /// <exception cref="InvalidOperationException">
+    ///     Thrown if the harness is not started or is started by an environment rather than a component.
+    /// </exception>
     protected IComponent Component
     {
         get
         {
             ThrowIfComponentNotStarted();
-            return _component;
+            return _component ?? throw new InvalidOperationException(
+                "The harness is started by an environment and is not bound to a component.");
         }
     }
 
@@ -31,25 +34,35 @@ public abstract class Harness : IHarness
     {
     }
 
-    Task IComponentDependency.OnStartAsync(IComponent component, CancellationToken cancellationToken)
+    Task IComponentDependency.OnStartAsync(IComponent component, CancellationToken cancellationToken) =>
+        AttachAsync(component, component, cancellationToken);
+
+    Task IComponentDependency.OnStopAsync(IComponent component, CancellationToken cancellationToken) =>
+        DetachAsync(component, cancellationToken);
+
+    private protected Task AttachAsync(object owner, IComponent? component, CancellationToken cancellationToken)
     {
-        if (_component is not null)
+        if (_owner is not null)
         {
-            throw new NotSupportedException("The harness is already started by a component.");
+            throw new NotSupportedException(
+                "The harness is already started by another component or environment. " +
+                "Use a separate harness instance or stop the previous owner first.");
         }
 
+        _owner = owner;
         _component = component;
         return OnStart(cancellationToken);
     }
 
-    async Task IComponentDependency.OnStopAsync(IComponent component, CancellationToken cancellationToken)
+    private protected async Task DetachAsync(object owner, CancellationToken cancellationToken)
     {
-        if (!ReferenceEquals(_component, component))
+        if (!ReferenceEquals(_owner, owner))
         {
             return;
         }
 
         await OnStop(cancellationToken).ConfigureAwait(false);
+        _owner = null;
         _component = null;
     }
 
@@ -75,12 +88,11 @@ public abstract class Harness : IHarness
     /// <exception cref="InvalidOperationException">
     ///     Thrown if the component is not started.
     /// </exception>
-    [MemberNotNull(nameof(_component))]
     protected void ThrowIfComponentNotStarted()
     {
-        if (_component is null)
+        if (_owner is null)
         {
-            throw new InvalidOperationException("Component not started.");
+            throw new InvalidOperationException("The harness is not started.");
         }
     }
 }
