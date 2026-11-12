@@ -22,6 +22,21 @@ The solution includes harnesses for the following components:
 - **HTTP Client**: Offers a harness for testing HTTP-based services and APIs.
   [![NuGet](https://img.shields.io/nuget/v/Enhanced.Testing.Component)](https://www.nuget.org/packages/Enhanced.Testing.Component)
 
+### Configuring containers
+
+Container harnesses (`PostgreSqlHarness`, `KafkaHarness`, `RedisHarness`, `RedisStackHarness`) let you override the
+image and customize the underlying Testcontainers builder:
+
+```csharp
+var postgreSql = new PostgreSqlHarness
+{
+    Image = "postgres:17",
+    ConfigureContainer = builder => builder
+        .WithEnvironment("TZ", "UTC")
+        .WithResourceMapping("init.sql", "/docker-entrypoint-initdb.d/")
+};
+```
+
 ## Getting Started
 
 To use these testing components in your project, follow these steps:

@@ -8,6 +8,21 @@ namespace Enhanced.Testing.Component.PostgreSql;
 public class PostgreSqlHarness : ContainerHarness<PostgreSqlContainer>
 {
     /// <summary>
+    ///     The default container image.
+    /// </summary>
+    public const string DefaultImage = "postgres:15.1";
+
+    /// <summary>
+    ///     The container image.
+    /// </summary>
+    public string Image { get; init; } = DefaultImage;
+
+    /// <summary>
+    ///     Customizes the container builder before the container is built.
+    /// </summary>
+    public Func<PostgreSqlBuilder, PostgreSqlBuilder>? ConfigureContainer { get; init; }
+
+    /// <summary>
     ///     The username to use when connecting to the PostgreSQL database.
     /// </summary>
     public string Username { get; init; } = PostgreSqlBuilder.DefaultUsername;
@@ -42,10 +57,13 @@ public class PostgreSqlHarness : ContainerHarness<PostgreSqlContainer>
     }
 
     /// <inheritdoc />
-    protected override PostgreSqlContainer OnCreateContainer() =>
-        new PostgreSqlBuilder("postgres:15.1")
+    protected override PostgreSqlContainer OnCreateContainer()
+    {
+        var builder = new PostgreSqlBuilder(Image)
             .WithUsername(Username)
             .WithPassword(Password)
-            .WithDatabase(Database)
-            .Build();
+            .WithDatabase(Database);
+
+        return (ConfigureContainer?.Invoke(builder) ?? builder).Build();
+    }
 }
