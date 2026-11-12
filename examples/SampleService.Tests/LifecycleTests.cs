@@ -14,6 +14,8 @@ namespace SampleService.Tests;
 
 public class LifecycleTests
 {
+    private const string TestRunLabel = "enhanced.testing.component.test-run";
+
     [Fact]
     public async Task ShouldRemoveContainersOnStop()
     {
@@ -234,7 +236,168 @@ public class LifecycleTests
         }
     }
 
-    private static async Task<bool> ContainerExistsAsync(string id)
+    [Fact]
+    public async Task ShouldStartContainerHarnessesConcurrently()
+    {
+        var firstEntered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var secondEntered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var first = new FakeContainerHarness(async ct =>
+        {
+            firstEntered.SetResult();
+            await secondEntered.Task.WaitAsync(TimeSpan.FromSeconds(30), ct);
+        });
+        var second = new FakeContainerHarness(async ct =>
+        {
+            secondEntered.SetResult();
+            await firstEntered.Task.WaitAsync(TimeSpan.FromSeconds(30), ct);
+        });
+        bool? containersStartedBeforeDependent = null;
+        var component = ComponentBuilder.Create<Program>()
+                                        .AddDependency(new DelegateDependency(onStart: () =>
+                                            containersStartedBeforeDependent = first.Started && second.Started))
+                                        .AddHarness(first)
+                                        .AddHarness(second)
+                                        .Build();
+
+        try
+        {
+            await component.StartAsync(default);
+        }
+        finally
+        {
+            await component.StopAsync(default);
+        }
+
+        Assert.True(containersStartedBeforeDependent);
+        Assert.Equal(1, first.DisposeCount);
+        Assert.Equal(1, second.DisposeCount);
+    }
+
+    [Fact]
+    public async Task ShouldStopDependenciesInReverseRegistrationOrder()
+    {
+        var events = new List<string>();
+        var component = ComponentBuilder.Create<Program>()
+                                        .AddDependency(new DelegateDependency(onStop: () => events.Add("first")))
+                                        .AddHarness(new FakeContainerHarness(_ => Task.CompletedTask,
+                                            () => events.Add("container")))
+                                        .AddDependency(new DelegateDependency(onStop: () => events.Add("last")))
+                                        .Build();
+
+        await component.StartAsync(default);
+        await component.StopAsync(default);
+
+        Assert.Equal(["last", "container", "first"], events);
+    }
+
+    [Fact]
+    public async Task ShouldWaitForParallelStartsAndRollBackWhenOneContainerFails()
+    {
+        var failure = new InvalidOperationException("Container failed to start.");
+        var slowEntered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var failed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var slowCompleted = false;
+        var slowCompletedBeforeDispose = false;
+        var dependentStarted = false;
+        var slow = new FakeContainerHarness(async ct =>
+            {
+                slowEntered.SetResult();
+                await failed.Task.WaitAsync(TimeSpan.FromSeconds(30), ct);
+                await Task.Delay(200, ct);
+                slowCompleted = true;
+            },
+            () => slowCompletedBeforeDispose = slowCompleted);
+        var failing = new FakeContainerHarness(async ct =>
+        {
+            await slowEntered.Task.WaitAsync(TimeSpan.FromSeconds(30), ct);
+            failed.SetResult();
+            throw failure;
+        });
+        var component = ComponentBuilder.Create<Program>()
+                                        .AddHarness(slow)
+                                        .AddHarness(failing)
+                                        .AddDependency(new DelegateDependency(onStart: () => dependentStarted = true))
+                                        .Build();
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => component.StartAsync(default));
+
+        Assert.Same(failure, exception);
+        Assert.True(slowCompletedBeforeDispose);
+        Assert.Equal(1, slow.DisposeCount);
+        Assert.Equal(1, failing.DisposeCount);
+        Assert.False(dependentStarted);
+        Assert.Throws<InvalidOperationException>(() => slow.Container);
+
+        await component.StopAsync(default);
+    }
+
+    [Fact]
+    public async Task ShouldAggregateFailuresOfParallelContainerStarts()
+    {
+        var first = new InvalidOperationException("First failed.");
+        var second = new InvalidOperationException("Second failed.");
+        var healthy = new FakeContainerHarness(_ => Task.CompletedTask);
+        var component = ComponentBuilder.Create<Program>()
+                                        .AddHarness(new FakeContainerHarness(_ => throw first))
+                                        .AddHarness(healthy)
+                                        .AddHarness(new FakeContainerHarness(_ => throw second))
+                                        .Build();
+
+        var exception = await Assert.ThrowsAsync<AggregateException>(() => component.StartAsync(default));
+
+        Assert.Equal(2, exception.InnerExceptions.Count);
+        Assert.Contains(first, exception.InnerExceptions);
+        Assert.Contains(second, exception.InnerExceptions);
+        Assert.Equal(1, healthy.DisposeCount);
+    }
+
+    [Fact]
+    public async Task ShouldSurfaceCancellationOfParallelContainerStarts()
+    {
+        using var cts = new CancellationTokenSource();
+        await cts.CancelAsync();
+
+        var first = new FakeContainerHarness(ct => Task.FromCanceled(ct));
+        var second = new FakeContainerHarness(ct => Task.FromCanceled(ct));
+        var component = ComponentBuilder.Create<Program>()
+                                        .AddHarness(first)
+                                        .AddHarness(second)
+                                        .Build();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => component.StartAsync(cts.Token));
+
+        Assert.Equal(1, first.DisposeCount);
+        Assert.Equal(1, second.DisposeCount);
+    }
+
+    [Fact]
+    public async Task ShouldRemoveRealContainersWhenParallelStartFails()
+    {
+        var label = Guid.NewGuid().ToString("N");
+        var redis = new StartTrackingRedisHarness
+        {
+            ConfigureContainer = builder => builder.WithLabel(TestRunLabel, label)
+        };
+        var failure = new InvalidOperationException("Container failed to start.");
+        var component = ComponentBuilder.Create<Program>()
+                                        .AddHarness(redis)
+                                        .AddHarness(new FakeContainerHarness(_ => throw failure))
+                                        .Build();
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => component.StartAsync(default));
+
+        Assert.Same(failure, exception);
+        Assert.True(redis.Started);
+        Assert.False(await ContainerWithLabelExistsAsync(label));
+        Assert.Throws<InvalidOperationException>(() => redis.Container);
+    }
+
+    private static Task<bool> ContainerExistsAsync(string id) => ContainerMatchesAsync("id", id);
+
+    private static Task<bool> ContainerWithLabelExistsAsync(string label) =>
+        ContainerMatchesAsync("label", $"{TestRunLabel}={label}");
+
+    private static async Task<bool> ContainerMatchesAsync(string filter, string value)
     {
         using var docker = TestcontainersSettings.OS.DockerEndpointAuthConfig
                                                  .GetDockerClientBuilder(Guid.Empty)
@@ -245,7 +408,7 @@ public class LifecycleTests
             All = true,
             Filters = new Dictionary<string, IDictionary<string, bool>>
             {
-                ["id"] = new Dictionary<string, bool> { [id] = true }
+                [filter] = new Dictionary<string, bool> { [value] = true }
             }
         });
 
@@ -288,6 +451,78 @@ public class LifecycleTests
 
         protected override IContainer OnCreateContainer() =>
             FailFirstDisposeProxy.Wrap(new RedisBuilder("redis:7.0").Build());
+    }
+
+    private sealed class StartTrackingRedisHarness : RedisHarness
+    {
+        public bool Started { get; private set; }
+
+        protected override async Task OnStart(CancellationToken cancellationToken)
+        {
+            await base.OnStart(cancellationToken);
+            Started = true;
+        }
+    }
+
+    private sealed class FakeContainerHarness(Func<CancellationToken, Task> onStart, Action? onDispose = null)
+        : ContainerHarness<IContainer>
+    {
+        private int _disposeCount;
+        private volatile bool _started;
+
+        public bool Started => _started;
+
+        public int DisposeCount => Volatile.Read(ref _disposeCount);
+
+        public override string? GetConnectionString() => null;
+
+        protected override IContainer OnCreateContainer() => FakeContainerProxy.Create(
+            async ct =>
+            {
+                await onStart(ct);
+                _started = true;
+            },
+            () =>
+            {
+                onDispose?.Invoke();
+                Interlocked.Increment(ref _disposeCount);
+            });
+    }
+
+    public class FakeContainerProxy : DispatchProxy
+    {
+        private Func<CancellationToken, Task> _onStart = null!;
+        private Action _onDispose = null!;
+
+        public static IContainer Create(Func<CancellationToken, Task> onStart, Action onDispose)
+        {
+            var proxy = Create<IContainer, FakeContainerProxy>();
+            var fake = (FakeContainerProxy)(object)proxy;
+            fake._onStart = onStart;
+            fake._onDispose = onDispose;
+            return proxy;
+        }
+
+        protected override object? Invoke(MethodInfo? targetMethod, object?[]? args)
+        {
+            ArgumentNullException.ThrowIfNull(targetMethod);
+
+            switch (targetMethod.Name)
+            {
+                case nameof(IContainer.StartAsync):
+                    return _onStart((CancellationToken)args![0]!);
+                case nameof(IAsyncDisposable.DisposeAsync):
+                    _onDispose();
+                    return ValueTask.CompletedTask;
+            }
+
+            if (targetMethod.ReturnType == typeof(Task))
+            {
+                return Task.CompletedTask;
+            }
+
+            return targetMethod.ReturnType.IsValueType ? Activator.CreateInstance(targetMethod.ReturnType) : null;
+        }
     }
 
     public class FailFirstDisposeProxy : DispatchProxy
