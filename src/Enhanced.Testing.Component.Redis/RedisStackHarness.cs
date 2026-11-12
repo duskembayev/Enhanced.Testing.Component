@@ -22,9 +22,18 @@ public class RedisStackHarness : ContainerHarness<RedisContainer>
     /// </summary>
     public Func<RedisBuilder, RedisBuilder>? ConfigureContainer { get; init; }
 
+    /// <summary>
+    ///     The database index the connection string selects (<c>defaultDatabase</c>). When null, database 0 is used.
+    /// </summary>
+    /// <remarks>
+    ///     Give each fixture its own index to isolate the application's keys while sharing one Redis server.
+    /// </remarks>
+    public int? DefaultDatabase { get; init; }
+
     /// <inheritdoc />
     public override string GetConnectionString() =>
-        $"{Container.Hostname}:{Container.GetMappedPublicPort(RedisBuilder.RedisPort)}";
+        RedisConnectionString.Build(Container.Hostname, Container.GetMappedPublicPort(RedisBuilder.RedisPort),
+            DefaultDatabase);
 
     /// <inheritdoc />
     protected override RedisContainer OnCreateContainer()

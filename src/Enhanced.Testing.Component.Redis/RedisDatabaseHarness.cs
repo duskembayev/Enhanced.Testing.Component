@@ -1,3 +1,4 @@
+using System.Text;
 using StackExchange.Redis;
 using StackExchange.Redis.KeyspaceIsolation;
 using Testcontainers.Redis;
@@ -12,13 +13,22 @@ namespace Enhanced.Testing.Component.Redis;
 /// </param>
 public class RedisDatabaseHarness(ContainerHarness<RedisContainer> redisHarness) : Harness
 {
+    private const int DeleteBatchSize = 1000;
+
     private IDatabase? _database;
+    private IDatabase? _unprefixedDatabase;
+    private string? _activeKeyPrefix;
     private ConnectionMultiplexer? _multiplexer;
 
     /// <summary>
     ///     The key prefix.
     /// </summary>
     public string? KeyPrefix { get; set; }
+
+    /// <summary>
+    ///     The database index to use. When null, the default database of the connection string is used.
+    /// </summary>
+    public int? DatabaseNumber { get; set; }
 
     /// <summary>
     ///     The Redis connection multiplexer.
@@ -44,20 +54,75 @@ public class RedisDatabaseHarness(ContainerHarness<RedisContainer> redisHarness)
         }
     }
 
+    /// <summary>
+    ///     Deletes the data of this harness: the keys that start with <see cref="KeyPrefix" /> when it is set; otherwise,
+    ///     every key in the database.
+    /// </summary>
+    /// <returns>
+    ///     A task that completes when the keys are deleted.
+    /// </returns>
+    public async Task FlushAsync()
+    {
+        ThrowIfComponentNotStarted();
+
+        var multiplexer = _multiplexer!;
+        var database = _unprefixedDatabase!;
+        var keyPrefix = _activeKeyPrefix;
+
+        foreach (var endPoint in multiplexer.GetEndPoints())
+        {
+            var server = multiplexer.GetServer(endPoint);
+
+            if (server.IsReplica || !server.IsConnected)
+            {
+                continue;
+            }
+
+            if (keyPrefix is null)
+            {
+                await server.FlushDatabaseAsync(database.Database).ConfigureAwait(false);
+                continue;
+            }
+
+            var batch = new List<RedisKey>(DeleteBatchSize);
+
+            await foreach (var key in server.KeysAsync(database.Database, EscapePattern(keyPrefix) + "*",
+                               DeleteBatchSize).ConfigureAwait(false))
+            {
+                batch.Add(key);
+
+                if (batch.Count == DeleteBatchSize)
+                {
+                    await database.KeyDeleteAsync(batch.ToArray()).ConfigureAwait(false);
+                    batch.Clear();
+                }
+            }
+
+            if (batch.Count > 0)
+            {
+                await database.KeyDeleteAsync(batch.ToArray()).ConfigureAwait(false);
+            }
+        }
+    }
+
     /// <inheritdoc />
     protected override async Task OnStart(CancellationToken cancellationToken)
     {
         var connectionString = redisHarness.GetConnectionString();
+        var options = ConfigurationOptions.Parse(connectionString!);
+        options.AllowAdmin = true;
 
         _multiplexer = await ConnectionMultiplexer
-                             .ConnectAsync(ConfigurationOptions.Parse(connectionString!))
+                             .ConnectAsync(options)
                              .ConfigureAwait(false);
 
-        _database = _multiplexer.GetDatabase();
+        _unprefixedDatabase = _multiplexer.GetDatabase(DatabaseNumber ?? -1);
+        _database = _unprefixedDatabase;
+        _activeKeyPrefix = KeyPrefix;
 
-        if (KeyPrefix != null)
+        if (_activeKeyPrefix != null)
         {
-            _database = _database.WithKeyPrefix(KeyPrefix);
+            _database = _database.WithKeyPrefix(_activeKeyPrefix);
         }
     }
 
@@ -73,6 +138,8 @@ public class RedisDatabaseHarness(ContainerHarness<RedisContainer> redisHarness)
 
         _multiplexer = null;
         _database = null;
+        _unprefixedDatabase = null;
+        _activeKeyPrefix = null;
 
         try
         {
@@ -82,5 +149,22 @@ public class RedisDatabaseHarness(ContainerHarness<RedisContainer> redisHarness)
         {
             await multiplexer.DisposeAsync().ConfigureAwait(false);
         }
+    }
+
+    private static string EscapePattern(string value)
+    {
+        var builder = new StringBuilder(value.Length);
+
+        foreach (var c in value)
+        {
+            if (c is '\\' or '*' or '?' or '[' or ']')
+            {
+                builder.Append('\\');
+            }
+
+            builder.Append(c);
+        }
+
+        return builder.ToString();
     }
 }
