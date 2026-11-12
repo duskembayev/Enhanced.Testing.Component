@@ -13,6 +13,8 @@ public abstract class ContainerHarness<TContainer> : Harness
 {
     private static readonly SemaphoreSlim ReuseLock = new(1, 1);
 
+    private static readonly TimeSpan ReuseFileLockRetryDelay = TimeSpan.FromMilliseconds(50);
+
     private TContainer? _container;
 
     /// <summary>
@@ -41,7 +43,9 @@ public abstract class ContainerHarness<TContainer> : Harness
     /// <summary>
     ///     Reuses a running container with the same configuration and keeps the container running when the harness
     ///     stops. Intended for local development only. Ignored by harnesses that don't support reuse
-    ///     (see <see cref="SupportsReuse" />).
+    ///     (see <see cref="SupportsReuse" />). Starts of reusable containers of the same container type are
+    ///     serialized within the process and, through a lock file in the temporary directory, across processes on
+    ///     the machine, so parallel test runs attach to one container instead of creating duplicates.
     /// </summary>
     public bool Reuse { get; init; }
 
@@ -79,11 +83,30 @@ public abstract class ContainerHarness<TContainer> : Harness
 
         try
         {
+            using var fileLock = await AcquireReuseFileLockAsync(cancellationToken).ConfigureAwait(false);
             await _container.StartAsync(cancellationToken).ConfigureAwait(false);
         }
         finally
         {
             ReuseLock.Release();
+        }
+    }
+
+    private static async Task<FileStream> AcquireReuseFileLockAsync(CancellationToken cancellationToken)
+    {
+        var name = new string(typeof(TContainer).FullName!.Select(c => char.IsLetterOrDigit(c) || c == '.' ? c : '_').ToArray());
+        var path = Path.Combine(Path.GetTempPath(), $"enhanced-testing-component-reuse-{name}.lock");
+
+        while (true)
+        {
+            try
+            {
+                return new FileStream(path, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
+            }
+            catch (IOException)
+            {
+                await Task.Delay(ReuseFileLockRetryDelay, cancellationToken).ConfigureAwait(false);
+            }
         }
     }
 

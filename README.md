@@ -182,7 +182,10 @@ Use it for local runs only, never in CI:
   earlier runs. Write tests that don't depend on an empty database, or remove the container after a schema change.
 - A container is matched by a hash of its configuration (image, environment, command, labels and so on). Harnesses with
   the same configuration share one container, including test classes that run in parallel and test runs for several
-  target frameworks. Give a harness its own container by adding a label:
+  target frameworks (starts are serialized through a lock file in the temporary directory, so parallel processes
+  don't create duplicates). Such harnesses also share their data. If Testcontainers still finds two matching containers
+  ("Sequence contains more than one element"), remove them with the command above. Give a harness its own container by
+  adding a label:
   `ConfigureContainer = builder => builder.WithLabel("reuse-scope", "orders-tests")`.
 - Changing the configuration creates a new container. The old one keeps running until you remove it.
 
