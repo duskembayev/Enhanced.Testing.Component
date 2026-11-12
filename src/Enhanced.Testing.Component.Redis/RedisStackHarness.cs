@@ -13,7 +13,6 @@ public class RedisStackHarness : ContainerHarness<RedisContainer>
 
     /// <inheritdoc />
     protected override RedisContainer OnCreateContainer() =>
-        new RedisBuilder()
-            .WithImage("redis/redis-stack-server:latest")
+        new RedisBuilder("redis/redis-stack-server:latest")
             .Build();
 }

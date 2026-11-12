@@ -1,16 +1,12 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
-
-    <PropertyGroup>
-        <TargetFramework>net8.0</TargetFramework>
-    </PropertyGroup>
+<Project Sdk="Microsoft.NET.Sdk">
 
     <ItemGroup>
       <ProjectReference Include="..\Enhanced.Testing.Component\Enhanced.Testing.Component.csproj" />
     </ItemGroup>
 
     <ItemGroup>
-      <PackageReference Include="Confluent.Kafka" Version="2.5.0" />
-      <PackageReference Include="Testcontainers.Kafka" Version="3.9.0" />
+      <PackageReference Include="Confluent.Kafka" Version="2.16.0" />
+      <PackageReference Include="Testcontainers.Kafka" Version="4.16.0" />
     </ItemGroup>
 
 </Project>

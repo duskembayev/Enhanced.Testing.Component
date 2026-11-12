@@ -12,5 +12,5 @@ public class RedisHarness : ContainerHarness<RedisContainer>
         $"{Container.Hostname}:{Container.GetMappedPublicPort(RedisBuilder.RedisPort)}";
 
     /// <inheritdoc />
-    protected override RedisContainer OnCreateContainer() => new RedisBuilder().Build();
+    protected override RedisContainer OnCreateContainer() => new RedisBuilder("redis:7.0").Build();
 }
