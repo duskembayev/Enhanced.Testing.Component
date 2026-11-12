@@ -1,3 +1,4 @@
+using Confluent.Kafka;
 using Enhanced.Testing.Component;
 using Enhanced.Testing.Component.Kafka;
 using Enhanced.Testing.Component.PostgreSql;
@@ -38,10 +39,15 @@ public class HarnessTests
         }
     }
 
-    [Fact]
-    public async Task ShouldFailToStartWhenTopicCannotBeCreated()
+    [Theory]
+    [InlineData(KafkaHarness.ConfluentImage)]
+    [InlineData(KafkaHarness.NativeImage)]
+    [InlineData(RedpandaHarness.DefaultImage)]
+    public async Task ShouldFailToStartWhenTopicCannotBeCreated(string image)
     {
-        var kafka = new KafkaHarness { Topics = ["invalid topic name"] };
+        IKafkaHarness kafka = image == RedpandaHarness.DefaultImage
+            ? new RedpandaHarness { Topics = ["invalid topic name"] }
+            : new KafkaHarness { Image = image, Topics = ["invalid topic name"] };
 
         var component = ComponentBuilder.Create<Program>()
                                         .AddHarness(kafka)
@@ -50,5 +56,7 @@ public class HarnessTests
         var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => component.StartAsync(default));
 
         Assert.Contains("invalid topic name", exception.Message);
+        var kafkaException = Assert.IsType<KafkaException>(exception.InnerException);
+        Assert.Equal(ErrorCode.TopicException, kafkaException.Error.Code);
     }
 }

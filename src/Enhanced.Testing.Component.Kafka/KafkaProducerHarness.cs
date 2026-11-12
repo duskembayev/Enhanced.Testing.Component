@@ -5,18 +5,39 @@ namespace Enhanced.Testing.Component.Kafka;
 /// <summary>
 ///     A Kafka producer harness.
 /// </summary>
-/// <param name="kafkaHarness">
-///     The Kafka harness.
-/// </param>
 /// <typeparam name="TKey">
 ///     The message key type.
 /// </typeparam>
 /// <typeparam name="TValue">
 ///     The message value type.
 /// </typeparam>
-public class KafkaProducerHarness<TKey, TValue>(KafkaHarness kafkaHarness) : Harness
+public class KafkaProducerHarness<TKey, TValue> : Harness
 {
+    private readonly IKafkaHarness _kafkaHarness;
     private IProducer<TKey, TValue>? _producer;
+
+    /// <summary>
+    ///     Initializes a new instance of the <see cref="KafkaProducerHarness{TKey, TValue}" /> class.
+    /// </summary>
+    /// <param name="kafkaHarness">
+    ///     The Kafka harness.
+    /// </param>
+    public KafkaProducerHarness(KafkaHarness kafkaHarness)
+        : this((IKafkaHarness)kafkaHarness)
+    {
+    }
+
+    /// <summary>
+    ///     Initializes a new instance of the <see cref="KafkaProducerHarness{TKey, TValue}" /> class.
+    /// </summary>
+    /// <param name="kafkaHarness">
+    ///     The Kafka-compatible broker harness.
+    /// </param>
+    public KafkaProducerHarness(IKafkaHarness kafkaHarness)
+    {
+        ArgumentNullException.ThrowIfNull(kafkaHarness);
+        _kafkaHarness = kafkaHarness;
+    }
 
     /// <summary>
     ///     The topic to produce.
@@ -34,6 +55,7 @@ public class KafkaProducerHarness<TKey, TValue>(KafkaHarness kafkaHarness) : Har
     public ISerializer<TValue>? ValueSerializer { get; set; }
 
     private static readonly TimeSpan FlushTimeout = TimeSpan.FromSeconds(10);
+    private static readonly TimeSpan WarmUpTimeout = TimeSpan.FromSeconds(5);
 
     /// <summary>
     ///     Produces a message.
@@ -70,13 +92,19 @@ public class KafkaProducerHarness<TKey, TValue>(KafkaHarness kafkaHarness) : Har
     {
         var producerConfig = new ProducerConfig
         {
-            BootstrapServers = kafkaHarness.GetConnectionString(), AllowAutoCreateTopics = false
+            BootstrapServers = _kafkaHarness.GetConnectionString(),
+            AllowAutoCreateTopics = false,
+            Acks = Acks.All,
+            LingerMs = 0,
+            SocketNagleDisable = true
         };
 
         _producer = new ProducerBuilder<TKey, TValue>(producerConfig)
                     .SetKeySerializer(KeySerializer)
                     .SetValueSerializer(ValueSerializer)
                     .Build();
+
+        WarmUp(_producer);
 
         return Task.CompletedTask;
     }
@@ -102,5 +130,18 @@ public class KafkaProducerHarness<TKey, TValue>(KafkaHarness kafkaHarness) : Har
         }
 
         return Task.CompletedTask;
+    }
+
+    private void WarmUp(IProducer<TKey, TValue> producer)
+    {
+        using var adminClient = new DependentAdminClientBuilder(producer.Handle).Build();
+
+        try
+        {
+            adminClient.GetMetadata(Topic, WarmUpTimeout);
+        }
+        catch (KafkaException)
+        {
+        }
     }
 }
