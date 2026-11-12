@@ -1,4 +1,6 @@
 using System.Data.Common;
+using System.Runtime.CompilerServices;
+using System.Text;
 using Testcontainers.PostgreSql;
 
 namespace Enhanced.Testing.Component.PostgreSql;
@@ -14,6 +16,8 @@ public class PostgreSqlHarness : ContainerHarness<PostgreSqlContainer>
     public const string DefaultImage = "postgres:15.1";
 
     private const string DataDirectory = "/var/lib/postgresql/data";
+
+    private const int MaxIdentifierLength = 63;
 
     /// <summary>
     ///     The container image.
@@ -81,11 +85,22 @@ public class PostgreSqlHarness : ContainerHarness<PostgreSqlContainer>
     /// <param name="cancellationToken">
     ///     The cancellation token.
     /// </param>
+    /// <remarks>
+    ///     Requires PostgreSQL 13 or later (<c>DROP DATABASE ... WITH (FORCE)</c>).
+    /// </remarks>
+    /// <exception cref="ArgumentException">
+    ///     A database name is empty, longer than 63 bytes in UTF-8 (PostgreSQL would truncate it) or contains a NUL
+    ///     character.
+    /// </exception>
+    /// <exception cref="InvalidOperationException">
+    ///     A statement failed; the message contains the output of <c>psql</c>.
+    /// </exception>
     public async Task CreateTemplateAsync(
         string template,
         Func<string, Task> seed,
         CancellationToken cancellationToken = default)
     {
+        ThrowIfInvalidDatabaseName(template);
         ArgumentNullException.ThrowIfNull(seed);
 
         await DropDatabaseAsync(template, cancellationToken).ConfigureAwait(false);
@@ -116,15 +131,25 @@ public class PostgreSqlHarness : ContainerHarness<PostgreSqlContainer>
     /// <returns>
     ///     The connection string for the new database.
     /// </returns>
+    /// <exception cref="ArgumentException">
+    ///     A database name is empty, longer than 63 bytes in UTF-8 (PostgreSQL would truncate it) or contains a NUL
+    ///     character.
+    /// </exception>
+    /// <exception cref="InvalidOperationException">
+    ///     A statement failed; the message contains the output of <c>psql</c>.
+    /// </exception>
     public async Task<string> CreateDatabaseAsync(
         string database,
         string? template = null,
         CancellationToken cancellationToken = default)
     {
+        ThrowIfInvalidDatabaseName(database);
+
         var sql = $"CREATE DATABASE {QuoteIdentifier(database)}";
 
         if (template is not null)
         {
+            ThrowIfInvalidDatabaseName(template);
             sql += $" TEMPLATE {QuoteIdentifier(template)}";
         }
 
@@ -141,11 +166,25 @@ public class PostgreSqlHarness : ContainerHarness<PostgreSqlContainer>
     /// <param name="cancellationToken">
     ///     The cancellation token.
     /// </param>
-    public Task DropDatabaseAsync(string database, CancellationToken cancellationToken = default) =>
-        ExecuteSqlAsync(
+    /// <remarks>
+    ///     Requires PostgreSQL 13 or later (<c>DROP DATABASE ... WITH (FORCE)</c>).
+    /// </remarks>
+    /// <exception cref="ArgumentException">
+    ///     A database name is empty, longer than 63 bytes in UTF-8 (PostgreSQL would truncate it) or contains a NUL
+    ///     character.
+    /// </exception>
+    /// <exception cref="InvalidOperationException">
+    ///     A statement failed; the message contains the output of <c>psql</c>.
+    /// </exception>
+    public Task DropDatabaseAsync(string database, CancellationToken cancellationToken = default)
+    {
+        ThrowIfInvalidDatabaseName(database);
+
+        return ExecuteSqlAsync(
             cancellationToken,
             $"UPDATE pg_database SET datistemplate = false WHERE datname = {QuoteLiteral(database)}",
             $"DROP DATABASE IF EXISTS {QuoteIdentifier(database)} WITH (FORCE)");
+    }
 
     private string BuildConnectionString(string database, bool? pooling)
     {
@@ -191,6 +230,20 @@ public class PostgreSqlHarness : ContainerHarness<PostgreSqlContainer>
     private static string TerminateConnectionsSql(string database) =>
         "SELECT pg_terminate_backend(pid) FROM pg_stat_activity " +
         $"WHERE datname = {QuoteLiteral(database)} AND pid <> pg_backend_pid()";
+
+    private static void ThrowIfInvalidDatabaseName(
+        string name,
+        [CallerArgumentExpression(nameof(name))] string? parameterName = null)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(name, parameterName);
+
+        if (name.Contains('\0', StringComparison.Ordinal) || Encoding.UTF8.GetByteCount(name) > MaxIdentifierLength)
+        {
+            throw new ArgumentException(
+                $"The database name must be at most {MaxIdentifierLength} bytes in UTF-8 and must not contain NUL characters.",
+                parameterName);
+        }
+    }
 
     private static string QuoteIdentifier(string identifier) => "\"" + identifier.Replace("\"", "\"\"") + "\"";
 
