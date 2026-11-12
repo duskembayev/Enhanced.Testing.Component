@@ -121,7 +121,8 @@ var postgreSql = new PostgreSqlHarness
 };
 ```
 
-`ConfigureContainer` runs after the harness has applied its own settings, so it can override any of them.
+`ConfigureContainer` runs after the harness has applied its own settings, so it can override them (except the
+`RedisHarness` persistence arguments described below).
 
 Any Kafka-compatible broker works with the producer and consumer harnesses (they accept `IKafkaHarness`).
 `KafkaHarness` uses `apache/kafka-native` (a GraalVM build of Apache Kafka) by default: it starts fastest and has the
@@ -150,10 +151,13 @@ expects the data to survive, or when the database is too large to keep in memory
 var postgreSql = new PostgreSqlHarness { Durable = true };
 ```
 
-`RedisHarness` passes `--save "" --appendonly no` as the container command and `RedisStackHarness` sets the
-`REDIS_ARGS` environment variable. `WithCommand` in `ConfigureContainer` appends to these arguments, so further
-`--option value` pairs work, but a command that starts with `redis-server` does not: set `Durable = true` in that case.
-Setting `REDIS_ARGS` yourself replaces the harness value.
+`PostgreSqlHarness` mounts tmpfs at `/var/lib/postgresql/data`; if `ConfigureContainer` mounts a volume or bind mount
+there, Docker rejects the duplicate mount point, so set `Durable = true` in that case.
+
+`RedisHarness` appends `--save "" --appendonly no` to the container command after `ConfigureContainer` has run, so a
+custom command (`redis-server /usr/local/etc/redis/redis.conf` or extra `--option value` pairs) keeps working, but its
+`save` and `appendonly` settings are overridden unless `Durable = true`. `RedisStackHarness` sets the `REDIS_ARGS`
+environment variable instead; setting `REDIS_ARGS` yourself replaces the harness value.
 
 ### Custom harnesses
 

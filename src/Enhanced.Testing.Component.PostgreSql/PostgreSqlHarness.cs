@@ -28,7 +28,9 @@ public class PostgreSqlHarness : ContainerHarness<PostgreSqlContainer>
     /// <summary>
     ///     Keeps the server durable: the data directory stays on the container filesystem and <c>fsync</c>,
     ///     <c>full_page_writes</c> and <c>synchronous_commit</c> are on. By default (<see langword="false" />)
-    ///     the data directory is on tmpfs and these settings are off, which is faster but loses data on a crash.
+    ///     the data directory (<c>/var/lib/postgresql/data</c>) is on tmpfs and these settings are off, which is
+    ///     faster but keeps the data in memory and loses it when the container stops. Set it to
+    ///     <see langword="true" /> when <see cref="ConfigureContainer" /> mounts a volume at the data directory.
     /// </summary>
     public bool Durable { get; init; }
 

@@ -94,6 +94,24 @@ public class ContainerConfigurationTests
         });
     }
 
+    [Fact]
+    public async Task ShouldDisableRedisPersistenceAfterCustomServerCommand()
+    {
+        var redis = new RedisHarness
+        {
+            ConfigureContainer = builder => builder.WithCommand("redis-server", "--save", "60 1", "--maxmemory", "10mb")
+        };
+
+        await RunAsync(redis, async () =>
+        {
+            var save = await redis.Container.ExecAsync(["redis-cli", "--raw", "config", "get", "save"]);
+            var maxMemory = await redis.Container.ExecAsync(["redis-cli", "--raw", "config", "get", "maxmemory"]);
+
+            Assert.Equal("save", save.Stdout.Trim());
+            Assert.Equal("maxmemory\n10485760", maxMemory.Stdout.Trim());
+        });
+    }
+
     private static async Task RunAsync(IHarness harness, Func<Task> assert)
     {
         var component = ComponentBuilder.Create<Program>()
