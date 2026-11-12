@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <DisablePackageBaselineValidation>true</DisablePackageBaselineValidation>
+    <DisablePackageBaselineValidation Condition="'$(PackageValidationBaselineVersion)' != '' and $([MSBuild]::VersionLessThan('$(PackageValidationBaselineVersion)', '1.4.0'))">true</DisablePackageBaselineValidation>
   </PropertyGroup>
 
   <ItemGroup>
