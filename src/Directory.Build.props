@@ -3,7 +3,8 @@
   <PropertyGroup>
     <TargetFrameworks>net8.0;net9.0;net10.0;net11.0</TargetFrameworks>
     <IsPackable>true</IsPackable>
-    <Version>1.4.0-dev</Version>
+    <MinVerTagPrefix>v</MinVerTagPrefix>
+    <MinVerAutoIncrement>minor</MinVerAutoIncrement>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <Authors>duskembayev</Authors>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
@@ -23,10 +24,19 @@
     <ContinuousIntegrationBuild Condition="'$(GITHUB_ACTIONS)' == 'true'">true</ContinuousIntegrationBuild>
   </PropertyGroup>
 
-  <PropertyGroup>
+  <PropertyGroup Condition="'$(PackageValidationBaselineVersion)' != ''">
     <EnablePackageValidation>true</EnablePackageValidation>
-    <PackageValidationBaselineVersion>1.3.0</PackageValidationBaselineVersion>
   </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="MinVer" Version="8.0.0" PrivateAssets="all" />
+  </ItemGroup>
+
+  <Target Name="SetAssemblyVersionFromMinVer" AfterTargets="MinVer">
+    <PropertyGroup>
+      <AssemblyVersion>$(MinVerMajor).$(MinVerMinor).$(MinVerPatch).0</AssemblyVersion>
+    </PropertyGroup>
+  </Target>
 
   <ItemGroup>
     <None Include="$(MSBuildThisFileDirectory)..\images\icon.png" Pack="true" PackagePath="icons"/>
