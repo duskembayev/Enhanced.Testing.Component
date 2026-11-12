@@ -96,6 +96,41 @@ public sealed class PostgreSqlTemplateTests : IAsyncLifetime
         Assert.Contains("already exists", exception.Message);
     }
 
+    [Fact]
+    public async Task ShouldCloneTemplateConcurrently()
+    {
+        await _postgreSql.CreateTemplateAsync(Template, SeedAsync);
+
+        var connectionStrings = await Task.WhenAll(
+            Enumerable.Range(0, 5).Select(i => _postgreSql.CreateDatabaseAsync($"people_parallel_{i}", Template)));
+
+        foreach (var connectionString in connectionStrings)
+        {
+            await using var context = CreateContext(connectionString);
+            Assert.Equal(1, await context.Persons.CountAsync());
+        }
+    }
+
+    [Fact]
+    public async Task ShouldQuoteDatabaseNamesAndRejectInvalidOnes()
+    {
+        const string name = "people \"quoted\" 'name'; DROP DATABASE postgres; --";
+
+        var connectionString = await _postgreSql.CreateDatabaseAsync(name);
+
+        await using (var context = CreateContext(connectionString))
+        {
+            Assert.True(await context.Database.CanConnectAsync());
+        }
+
+        await _postgreSql.DropDatabaseAsync(name);
+
+        await Assert.ThrowsAsync<ArgumentException>(() => _postgreSql.CreateDatabaseAsync(new string('a', 64)));
+        await Assert.ThrowsAsync<ArgumentException>(() => _postgreSql.CreateDatabaseAsync("people", "\u00e9" + new string('a', 62)));
+        await Assert.ThrowsAsync<ArgumentException>(() => _postgreSql.DropDatabaseAsync(string.Empty));
+        await Assert.ThrowsAsync<ArgumentException>(() => _postgreSql.CreateTemplateAsync("a\0b", SeedAsync));
+    }
+
     public Task InitializeAsync() => _component.StartAsync(default);
 
     public Task DisposeAsync() => _component.StopAsync(default);
