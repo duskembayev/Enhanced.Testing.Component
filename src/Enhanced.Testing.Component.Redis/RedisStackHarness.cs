@@ -26,9 +26,20 @@ public class RedisStackHarness : ContainerHarness<RedisContainer>
     ///     The database index the connection string selects (<c>defaultDatabase</c>). When null, database 0 is used.
     /// </summary>
     /// <remarks>
-    ///     Give each fixture its own index to isolate the application's keys while sharing one Redis server.
+    ///     Give each fixture its own index to isolate the application's keys while sharing one Redis server. Redis has
+    ///     16 databases (0-15) unless its <c>databases</c> setting is changed; commands to an index outside that range
+    ///     fail.
     /// </remarks>
-    public int? DefaultDatabase { get; init; }
+    /// <exception cref="ArgumentOutOfRangeException">
+    ///     Thrown if the value is negative.
+    /// </exception>
+    public int? DefaultDatabase
+    {
+        get => _defaultDatabase;
+        init => _defaultDatabase = RedisConnectionString.ValidateDatabase(value, nameof(DefaultDatabase));
+    }
+
+    private readonly int? _defaultDatabase;
 
     /// <inheritdoc />
     public override string GetConnectionString() =>

@@ -112,4 +112,26 @@ public class RedisIsolationTests(RedisIsolationFixture fixture) : IClassFixture<
     {
         Assert.EndsWith(",defaultDatabase=3", fixture.Redis.GetConnectionString());
     }
+
+    [Fact]
+    public async Task ShouldNotFlushWhenCancelled()
+    {
+        const string key = "cancelled-flush-key";
+
+        await fixture.Second.Database.StringSetAsync(key, "kept");
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            fixture.Second.FlushAsync(new CancellationToken(true)));
+
+        Assert.Equal("kept", await fixture.Second.Database.StringGetAsync(key));
+    }
+
+    [Fact]
+    public void ShouldRejectNegativeDatabaseIndexes()
+    {
+        Assert.Throws<ArgumentOutOfRangeException>(() => new RedisHarness { DefaultDatabase = -1 });
+        Assert.Throws<ArgumentOutOfRangeException>(() => new RedisStackHarness { DefaultDatabase = -1 });
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            new RedisDatabaseHarness(fixture.Redis) { DatabaseNumber = -1 });
+    }
 }

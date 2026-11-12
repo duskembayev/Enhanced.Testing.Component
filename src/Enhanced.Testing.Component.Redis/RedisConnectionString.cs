@@ -2,14 +2,16 @@ namespace Enhanced.Testing.Component.Redis;
 
 internal static class RedisConnectionString
 {
-    public static string Build(string host, ushort port, int? defaultDatabase)
+    public static string Build(string host, ushort port, int? defaultDatabase) =>
+        defaultDatabase is null ? $"{host}:{port}" : $"{host}:{port},defaultDatabase={defaultDatabase.Value}";
+
+    public static int? ValidateDatabase(int? database, string paramName)
     {
-        if (defaultDatabase is null)
+        if (database is not null)
         {
-            return $"{host}:{port}";
+            ArgumentOutOfRangeException.ThrowIfNegative(database.Value, paramName);
         }
 
-        ArgumentOutOfRangeException.ThrowIfNegative(defaultDatabase.Value, nameof(defaultDatabase));
-        return $"{host}:{port},defaultDatabase={defaultDatabase.Value}";
+        return database;
     }
 }

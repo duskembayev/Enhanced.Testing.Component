@@ -15,6 +15,7 @@ public class RedisDatabaseHarness(ContainerHarness<RedisContainer> redisHarness)
 {
     private const int DeleteBatchSize = 1000;
 
+    private int? _databaseNumber;
     private IDatabase? _database;
     private IDatabase? _unprefixedDatabase;
     private string? _activeKeyPrefix;
@@ -28,11 +29,25 @@ public class RedisDatabaseHarness(ContainerHarness<RedisContainer> redisHarness)
     /// <summary>
     ///     The database index to use. When null, the default database of the connection string is used.
     /// </summary>
-    public int? DatabaseNumber { get; set; }
+    /// <remarks>
+    ///     The value is read when the component starts.
+    /// </remarks>
+    /// <exception cref="ArgumentOutOfRangeException">
+    ///     Thrown if the value is negative.
+    /// </exception>
+    public int? DatabaseNumber
+    {
+        get => _databaseNumber;
+        set => _databaseNumber = RedisConnectionString.ValidateDatabase(value, nameof(DatabaseNumber));
+    }
 
     /// <summary>
     ///     The Redis connection multiplexer.
     /// </summary>
+    /// <remarks>
+    ///     The multiplexer is connected with <see cref="ConfigurationOptions.AllowAdmin" /> enabled, so admin commands
+    ///     such as <c>FLUSHDB</c> are allowed.
+    /// </remarks>
     public ConnectionMultiplexer Multiplexer
     {
         get
@@ -58,12 +73,22 @@ public class RedisDatabaseHarness(ContainerHarness<RedisContainer> redisHarness)
     ///     Deletes the data of this harness: the keys that start with <see cref="KeyPrefix" /> when it is set; otherwise,
     ///     every key in the database.
     /// </summary>
+    /// <remarks>
+    ///     The prefix and the database are those in effect when the component started.
+    /// </remarks>
+    /// <param name="cancellationToken">
+    ///     The cancellation token. It is checked between Redis commands; a command already sent is not cancelled.
+    /// </param>
     /// <returns>
     ///     A task that completes when the keys are deleted.
     /// </returns>
-    public async Task FlushAsync()
+    /// <exception cref="InvalidOperationException">
+    ///     Thrown if the component is not started.
+    /// </exception>
+    public async Task FlushAsync(CancellationToken cancellationToken = default)
     {
         ThrowIfComponentNotStarted();
+        cancellationToken.ThrowIfCancellationRequested();
 
         var multiplexer = _multiplexer!;
         var database = _unprefixedDatabase!;
@@ -73,7 +98,7 @@ public class RedisDatabaseHarness(ContainerHarness<RedisContainer> redisHarness)
         {
             var server = multiplexer.GetServer(endPoint);
 
-            if (server.IsReplica || !server.IsConnected)
+            if (server.IsReplica)
             {
                 continue;
             }
@@ -87,12 +112,15 @@ public class RedisDatabaseHarness(ContainerHarness<RedisContainer> redisHarness)
             var batch = new List<RedisKey>(DeleteBatchSize);
 
             await foreach (var key in server.KeysAsync(database.Database, EscapePattern(keyPrefix) + "*",
-                               DeleteBatchSize).ConfigureAwait(false))
+                                                DeleteBatchSize)
+                                            .WithCancellation(cancellationToken)
+                                            .ConfigureAwait(false))
             {
                 batch.Add(key);
 
                 if (batch.Count == DeleteBatchSize)
                 {
+                    cancellationToken.ThrowIfCancellationRequested();
                     await database.KeyDeleteAsync(batch.ToArray()).ConfigureAwait(false);
                     batch.Clear();
                 }
