@@ -62,6 +62,11 @@ public class OrdersTests(OrdersFixture fixture) : IClassFixture<OrdersFixture>
 }
 ```
 
+The test project references the application project. `Program` must be visible to it: with top-level statements before
+.NET 10, add `<InternalsVisibleTo Include="MyApp.Tests" />` to the application project or declare
+`public partial class Program;`. The example uses xUnit v2; in xUnit v3, `InitializeAsync` and `DisposeAsync` return
+`ValueTask`.
+
 The application reads `ConnectionStrings:Orders` as usual and gets the container's connection string. See
 [`SampleServiceFixture`](https://github.com/duskembayev/Enhanced.Testing.Component/blob/main/examples/SampleService.Tests/SampleServiceFixture.cs)
 for a fixture with PostgreSQL, Kafka, Redis and gRPC.

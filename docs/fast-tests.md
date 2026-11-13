@@ -7,8 +7,8 @@ what the library does by default and what you can do on top.
 
 - **Containers start in parallel.** Startup time is that of the slowest container, not the sum of all of them. See
   [Component lifecycle](lifecycle.md).
-- **Light images.** Kafka uses `apache/kafka-native`, a GraalVM build that starts about twice as fast as the JVM image
-  and is several times smaller.
+- **Light images.** Kafka uses `apache/kafka-native`, a GraalVM build that starts faster than the JVM image and is
+  much smaller.
 - **No durability.** PostgreSQL keeps its data on tmpfs, and Redis doesn't write snapshots. Test data doesn't need to
   survive a crash; set `Durable = true` on a harness when it does.
 

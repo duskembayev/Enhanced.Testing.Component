@@ -66,7 +66,8 @@ await producer.ProduceAsync("order-42", "created");
 var message = await consumer.WaitForKeyAsync("order-42", TimeSpan.FromSeconds(10));
 ```
 
-The consumers read partition 0, which is the only partition of a topic created with the bundled images' defaults.
+All consumers, `KafkaConsumerHarness` included, read only partition 0, which is the only partition of a topic
+created with the bundled images' defaults. Messages in other partitions of a multi-partition topic are not seen.
 
 ## Choosing a broker
 

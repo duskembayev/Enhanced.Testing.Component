@@ -19,13 +19,13 @@ peopleDb.EnsureCreatedOnStart(builder => builder.UseNpgsql(postgreSql.GetConnect
 var component = ComponentBuilder.Create<Program>()
                                 .AddHarness(postgreSql)
                                 .AddHarness(peopleDb)
-                                .AddHarness(grpc)
+                                .AddHarness(http)
                                 .Build();
 ```
 
-`DbContextHarness<TContext>` works with any `DbContext` that has a constructor taking `DbContextOptions`. Add the
-harness after the database harness it depends on. The `EnsureCreatedOnStart` callback runs when the component
-starts, after the database container is up, and creates the schema with `Database.EnsureCreated`.
+Add the harness after the database harness it depends on. `EnsureCreatedOnStart` configures the options when the
+component starts, after the database container is up, and creates the schema with `Database.EnsureCreatedAsync`. For
+this, `TContext` needs a constructor taking `DbContextOptions<TContext>` or `DbContextOptions`.
 
 In a test, query or seed through the application's own `DbContext` (resolved from the application's service
 provider in a new scope):

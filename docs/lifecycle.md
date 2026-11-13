@@ -24,8 +24,8 @@ failure is rethrown as is; several failures are wrapped in an `AggregateExceptio
 shut down cleanly. It then stops the harnesses in reverse order and removes their containers.
 
 A harness that fails to stop does not prevent the others from stopping. The failure is rethrown afterwards, and
-calling `StopAsync` again retries only the steps that did not complete. If the cancellation token fires, the step in
-progress completes, the remaining steps are skipped and `OperationCanceledException` is thrown.
+calling `StopAsync` again retries only the steps that did not complete. If the cancellation token fires, the remaining
+steps are skipped and `OperationCanceledException` is thrown; calling `StopAsync` again finishes them.
 
 ## Ordering harnesses
 

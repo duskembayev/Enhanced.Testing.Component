@@ -22,8 +22,8 @@ connection string to the application as `ConnectionStrings:{ConnectionName}`, an
 component stops. Override `OnStart` (call `base.OnStart` first) to prepare the container, for example to create
 topics or users.
 
-If your container needs another harness while it starts, document that users must set `StartConcurrently = false` on
-it. See [Component lifecycle](lifecycle.md#ordering-harnesses).
+If your container needs another harness while it starts, set `StartConcurrently = false` in the harness constructor
+(it is an `init` property, so users can also set it). See [Component lifecycle](lifecycle.md#ordering-harnesses).
 
 ## Any other harness
 

@@ -32,7 +32,8 @@ Assert.Equal("Hello John", reply.Message);
 
 The harness creates one channel per client type and shuts the channels down when the component stops.
 
-Generate the client from the same `.proto` file as the service, for example in the test project:
+Generate the client from the same `.proto` file as the service, for example in the test project (code generation
+needs the `Grpc.Tools` and `Google.Protobuf` packages, or `Grpc.AspNetCore`, which includes both):
 
 ```xml
 <ItemGroup>

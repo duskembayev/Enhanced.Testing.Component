@@ -46,6 +46,11 @@ public class OrdersTests(OrdersFixture fixture) : IClassFixture<OrdersFixture>
 `HttpClientHarness.CreateClient()` returns an `HttpClient` that calls the application in memory through `TestServer`,
 without opening network ports.
 
+The test project references the application project, and `Program` must be visible to it: with top-level statements
+before .NET 10, add `<InternalsVisibleTo Include="MyApp.Tests" />` to the application project or declare
+`public partial class Program;`. The example uses xUnit v2; in xUnit v3, `InitializeAsync` and `DisposeAsync` return
+`ValueTask`.
+
 ## Lifecycle
 
 `StartAsync` starts all container harnesses in parallel, then the other harnesses in the order they were added, then
