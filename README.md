@@ -1,257 +1,117 @@
-# Enhanced.Testing.Component
+<p align="center">
+  <img src="https://raw.githubusercontent.com/duskembayev/Enhanced.Testing.Component/main/images/icon.png" alt="Enhanced.Testing.Component" width="96" />
+</p>
 
-[![NuGet](https://img.shields.io/nuget/v/Enhanced.Testing.Component)](https://www.nuget.org/packages/Enhanced.Testing.Component)
+<h1 align="center">Enhanced.Testing.Component</h1>
 
-This solution provides a set of harnesses for integrating various external components into your .NET testing
-environment. It simplifies the process of setting up and tearing down external dependencies such as databases, message
-brokers, and other services during testing.
+<p align="center">
+  Component tests for ASP.NET Core with real dependencies: PostgreSQL, Kafka, Redis and more, in a few lines of code.
+</p>
 
-## Harnesses
+<p align="center">
+  <a href="https://www.nuget.org/packages/Enhanced.Testing.Component"><img src="https://img.shields.io/nuget/v/Enhanced.Testing.Component" alt="NuGet" /></a>
+  <a href="https://github.com/duskembayev/Enhanced.Testing.Component/actions/workflows/build.yml"><img src="https://github.com/duskembayev/Enhanced.Testing.Component/actions/workflows/build.yml/badge.svg?branch=main" alt="Build" /></a>
+  <a href="https://github.com/duskembayev/Enhanced.Testing.Component/blob/main/LICENSE"><img src="https://img.shields.io/github/license/duskembayev/Enhanced.Testing.Component" alt="License" /></a>
+  <img src="https://img.shields.io/badge/.NET-8%20%7C%209%20%7C%2010%20%7C%2011-512BD4" alt=".NET 8 | 9 | 10 | 11" />
+</p>
 
-The solution includes harnesses for the following components:
+## Why
 
-- **PostgreSQL**: Facilitates the setup of a PostgreSQL database container for integration testing.
-  [![NuGet](https://img.shields.io/nuget/v/Enhanced.Testing.Component.PostgreSql)](https://www.nuget.org/packages/Enhanced.Testing.Component.PostgreSql)
-- **Redis**: Provides support for both Redis and RedisStack, allowing for easy integration of Redis services into your
-  tests.
-  [![NuGet](https://img.shields.io/nuget/v/Enhanced.Testing.Component.Redis)](https://www.nuget.org/packages/Enhanced.Testing.Component.Redis)
-- **Kafka**: Harnesses for a Kafka broker (Confluent, Apache Kafka native or Redpanda) for message-based integration
-  testing.
-  [![NuGet](https://img.shields.io/nuget/v/Enhanced.Testing.Component.Kafka)](https://www.nuget.org/packages/Enhanced.Testing.Component.Kafka)
-- **WireMock**: Hosts an in-process WireMock.Net server that fakes external HTTP services.
-  [![NuGet](https://img.shields.io/nuget/v/Enhanced.Testing.Component.WireMock)](https://www.nuget.org/packages/Enhanced.Testing.Component.WireMock)
-- **gRPC Client**: Simplifies the process of testing gRPC services by providing a client harness.
-  [![NuGet](https://img.shields.io/nuget/v/Enhanced.Testing.Component.GrpcClient)](https://www.nuget.org/packages/Enhanced.Testing.Component.GrpcClient)
-- **HTTP Client**: Offers a harness for testing HTTP-based services and APIs.
-  [![NuGet](https://img.shields.io/nuget/v/Enhanced.Testing.Component)](https://www.nuget.org/packages/Enhanced.Testing.Component)
-- **Time**: Replaces the application's `TimeProvider` with a `FakeTimeProvider` to control time in tests.
-  [![NuGet](https://img.shields.io/nuget/v/Enhanced.Testing.Component.Time)](https://www.nuget.org/packages/Enhanced.Testing.Component.Time)
+- **Real dependencies.** PostgreSQL, Kafka and Redis run in Docker via [Testcontainers](https://dotnet.testcontainers.org/),
+  and their connection strings reach your application through its normal configuration. No test-only code in the app.
+- **One lifecycle.** A component starts the containers, then your application in memory, and stops and removes
+  everything at the end, including after a failed start.
+- **Fast.** Containers start in parallel, databases run without durability, Kafka uses the native image, and
+  PostgreSQL template databases give each test its own copy in milliseconds.
+- **Deterministic.** Wait for *your* Kafka message instead of the next one, isolate data per test, and move time
+  forward instead of sleeping.
 
-## Getting Started
+## Quick start
 
-To use these testing components in your project, follow these steps:
-
-1. **Add Dependencies**: Ensure your project references the `Enhanced.Testing.Component` namespace and its dependencies.
-
-2. **Configure Test Fixtures**: Use the provided harnesses in your test fixtures for setting up and tearing down
-   external services. See the `SampleServiceFixture` class for an example.
-
-3. **Integration Testing**: Write your integration tests using the configured fixtures to interact with real instances
-   of your external dependencies.
-
-## Example Usage
-
-Below is an example of how to set up a test fixture using the PostgreSQL harness:
+```shell
+dotnet add package Enhanced.Testing.Component.PostgreSql
+```
 
 ```csharp
-public class MyServiceFixture : IAsyncLifetime
+public class OrdersFixture : IAsyncLifetime
 {
     private readonly IComponent _component;
 
-    public MyServiceFixture()
+    public OrdersFixture()
     {
-        HttpClient = new HttpClientHarness();
-        PostgreSql = new PostgreSqlHarness { ConnectionName = "PeopleDb" };
-        PeopleDb = new DbContextHarness<PeopleDbContext>();
-        PeopleDb.EnsureCreatedOnStart(builder => builder.UseNpgsql(PostgreSql.GetConnectionString()));
-
         _component = ComponentBuilder.Create<Program>()
-                                     .AddHarness(HttpClient)
                                      .AddHarness(PostgreSql)
-                                     .AddHarness(PeopleDb)
+                                     .AddHarness(Http)
                                      .Build();
     }
 
-    public HttpClientHarness HttpClient { get; }
+    public PostgreSqlHarness PostgreSql { get; } = new() { ConnectionName = "Orders" };
 
-    public PostgreSqlHarness PostgreSql { get; }
-
-    public DbContextHarness<PeopleDbContext> PeopleDb { get; }
+    public HttpClientHarness Http { get; } = new();
 
     public Task InitializeAsync() => _component.StartAsync(CancellationToken.None);
 
     public Task DisposeAsync() => _component.StopAsync(CancellationToken.None);
 }
+
+public class OrdersTests(OrdersFixture fixture) : IClassFixture<OrdersFixture>
+{
+    [Fact]
+    public async Task ShouldCreateOrder()
+    {
+        var response = await fixture.Http.CreateClient().PostAsJsonAsync("/orders", new { Item = "book" });
+
+        response.EnsureSuccessStatusCode();
+    }
+}
 ```
+
+The application reads `ConnectionStrings:Orders` as usual and gets the container's connection string. See
+[`SampleServiceFixture`](https://github.com/duskembayev/Enhanced.Testing.Component/blob/main/examples/SampleService.Tests/SampleServiceFixture.cs)
+for a fixture with PostgreSQL, Kafka, Redis and gRPC.
+
+## Packages
+
+| Package | What it gives you | NuGet |
+|---|---|---|
+| `Enhanced.Testing.Component` | The component, `HttpClientHarness`, base classes for custom harnesses | [![NuGet](https://img.shields.io/nuget/v/Enhanced.Testing.Component)](https://www.nuget.org/packages/Enhanced.Testing.Component) |
+| `Enhanced.Testing.Component.PostgreSql` | PostgreSQL container, per-test template databases | [![NuGet](https://img.shields.io/nuget/v/Enhanced.Testing.Component.PostgreSql)](https://www.nuget.org/packages/Enhanced.Testing.Component.PostgreSql) |
+| `Enhanced.Testing.Component.DbContext` | EF Core: create the schema on start, query the application's database | [![NuGet](https://img.shields.io/nuget/v/Enhanced.Testing.Component.DbContext)](https://www.nuget.org/packages/Enhanced.Testing.Component.DbContext) |
+| `Enhanced.Testing.Component.Kafka` | Kafka (native, Confluent) or Redpanda, producer and consumer harnesses, per-test topics | [![NuGet](https://img.shields.io/nuget/v/Enhanced.Testing.Component.Kafka)](https://www.nuget.org/packages/Enhanced.Testing.Component.Kafka) |
+| `Enhanced.Testing.Component.Redis` | Redis or Redis Stack, direct database access, per-test databases | [![NuGet](https://img.shields.io/nuget/v/Enhanced.Testing.Component.Redis)](https://www.nuget.org/packages/Enhanced.Testing.Component.Redis) |
+| `Enhanced.Testing.Component.GrpcClient` | gRPC clients that call the application in memory | [![NuGet](https://img.shields.io/nuget/v/Enhanced.Testing.Component.GrpcClient)](https://www.nuget.org/packages/Enhanced.Testing.Component.GrpcClient) |
+| `Enhanced.Testing.Component.WireMock` | In-process fakes for external HTTP APIs | [![NuGet](https://img.shields.io/nuget/v/Enhanced.Testing.Component.WireMock)](https://www.nuget.org/packages/Enhanced.Testing.Component.WireMock) |
+| `Enhanced.Testing.Component.Time` | A fake `TimeProvider` the test controls | [![NuGet](https://img.shields.io/nuget/v/Enhanced.Testing.Component.Time)](https://www.nuget.org/packages/Enhanced.Testing.Component.Time) |
 
 ## Features
 
-### Real dependencies in Docker
+- **[Lifecycle and customization](https://github.com/duskembayev/Enhanced.Testing.Component/blob/main/docs/lifecycle.md)**:
+  parallel container start, rollback on failure, removing hosted services, your own `WebApplicationFactory`, custom
+  harnesses.
+- **[Containers](https://github.com/duskembayev/Enhanced.Testing.Component/blob/main/docs/containers.md)**:
+  choose the image, customize the Testcontainers builder, fast non-durable defaults.
+- **[Kafka](https://github.com/duskembayev/Enhanced.Testing.Component/blob/main/docs/kafka.md)**:
+  native, Confluent or Redpanda brokers, waiting for a specific message, a topic per test.
+- **[PostgreSQL and EF Core](https://github.com/duskembayev/Enhanced.Testing.Component/blob/main/docs/postgresql.md)**:
+  schema on start, queries against the application's database, template databases.
+- **[Redis](https://github.com/duskembayev/Enhanced.Testing.Component/blob/main/docs/redis.md)**:
+  direct database access, a database per fixture, flushing test data.
+- **[HTTP and time fakes](https://github.com/duskembayev/Enhanced.Testing.Component/blob/main/docs/fakes.md)**:
+  WireMock for external APIs, `FakeTimeProvider` for timeouts, retries and timers.
 
-PostgreSQL, Kafka and Redis run as real containers via [Testcontainers](https://dotnet.testcontainers.org/). Set
-`ConnectionName` on a container harness and its connection string is passed to the application under test as
-`ConnectionStrings:{ConnectionName}`, so the app needs no test-specific configuration.
+## Requirements
 
-### Managed lifecycle
+- .NET 8, 9, 10 or 11.
+- Docker for the container harnesses (PostgreSQL, Kafka, Redis). The HTTP, gRPC, WireMock and time harnesses don't
+  need it.
+- Any test framework: the component only needs to be started and stopped, for example from an xUnit fixture.
 
-`StartAsync` starts all container harnesses (`ContainerHarness<TContainer>`) concurrently, so the startup time of
-several containers does not add up. It then starts the other harnesses in the order they were added, and finally the
-application. If anything fails to start, everything started so far is stopped again. `StopAsync` stops the application
-first, then the harnesses in reverse order, and removes their containers. Add a harness after the harnesses it depends
-on (for example, `DbContextHarness` after `PostgreSqlHarness`). A container harness that needs another harness while it
-starts (for example, a container connecting to another container) must be created with `StartConcurrently = false`;
-it is then started with the other harnesses in the order it was added.
+## Releases
 
-### Clients for the application under test
+Packages are published to nuget.org by CI when a `vX.Y.Z` tag is pushed. Versions follow
+[semantic versioning](https://semver.org/), and package validation guards against breaking API changes within a major
+version. See [Releases](https://github.com/duskembayev/Enhanced.Testing.Component/releases) for the changelog.
 
-`HttpClientHarness` and `GrpcClientHarness` create clients that call the application in memory through `TestServer`,
-without opening network ports.
+## License
 
-### Test data and assertions
-
-- `WireMockHarness` (`Enhanced.Testing.Component.WireMock`) hosts an in-process WireMock.Net server instead of a real
-  external HTTP service and passes its URL to the application (`ConfigurationKey`). Stub and verify calls through
-  `Server`, and call `Reset` between tests.
-- `DbContextHarness<TContext>` creates the schema on start (`EnsureCreatedOnStart`) and runs queries against the
-  application's database (`ExecuteAsync`).
-- `KafkaHarness` and `RedpandaHarness` create topics on start (`Topics`; existing topics are kept) and wait until they
-  have a partition leader. `KafkaProducerHarness` sends messages to the application, and `KafkaConsumerHarness` reads
-  what it produced. The consumer is positioned at the end of the topic on start; prefer waiting for *your* message
-  over reading the next one, so messages left by other tests or a slow producer don't make the test flaky:
-
-  ```csharp
-  var message = await consumer.WaitForKeyAsync("order-42", TimeSpan.FromSeconds(10));
-  var result = await consumer.WaitForMessageAsync(r => r.Message.Value.Contains("42"), TimeSpan.FromSeconds(10));
-  ```
-
-  Non-matching messages are skipped; a `TimeoutException` reports how many. `SeekToBeginning`/`SeekToEnd` move the
-  position the wait starts from.
-
-  To let tests share one broker and still run in parallel, give each test its own topic. `CreateUniqueTopicAsync`
-  creates a topic with a unique name and waits for its leader; `CreateConsumerAsync` and `CreateProducerAsync` return
-  disposable clients bound to it, with the same `WaitFor*` API:
-
-  ```csharp
-  var topic = await kafka.CreateUniqueTopicAsync("orders");
-  using var consumer = await kafka.CreateConsumerAsync<string, string>(topic);
-  using var producer = await kafka.CreateProducerAsync<string, string>(topic);
-
-  await producer.ProduceAsync("order-42", "created");
-  var message = await consumer.WaitForKeyAsync("order-42", TimeSpan.FromSeconds(10));
-  ```
-- `RedisDatabaseHarness` gives direct access to the Redis database (`Database`). `DatabaseNumber` selects a database
-  index and `KeyPrefix` scopes its keys; `FlushAsync` deletes the harness's data (keys with `KeyPrefix` when set,
-  otherwise the whole database). To keep fixtures that share one Redis server apart, give each application its own
-  database: `DefaultDatabase` on `RedisHarness`/`RedisStackHarness` adds `defaultDatabase=N` to the connection string
-  passed to the application, and `RedisDatabaseHarness` follows it:
-
-  ```csharp
-  var redis = new RedisHarness { ConnectionName = "Redis", DefaultDatabase = 3 };
-  var redisDatabase = new RedisDatabaseHarness(redis);
-
-  await redisDatabase.FlushAsync();
-  ```
-- `TimeProviderHarness` (`Enhanced.Testing.Component.Time`) replaces the application's `TimeProvider` with a
-  `FakeTimeProvider` (`TimeProvider`), so delays, timeouts and timers complete as soon as the test moves the clock
-  (`Advance`, `SetUtcNow`) instead of waiting for real time. It affects only code that resolves `TimeProvider` from
-  the service provider, including framework and library services that do so (for example, resilience handlers): their
-  timeouts and retry delays no longer elapse on their own. `DateTime.UtcNow`, `TimeProvider.System` and the containers
-  keep the real clock.
-
-  ```csharp
-  var time = new TimeProviderHarness(new DateTimeOffset(2030, 1, 1, 0, 0, 0, TimeSpan.Zero));
-  ```
-
-### Per-test PostgreSQL databases from a template
-
-To isolate tests that write to PostgreSQL without starting a container per test, prepare a template database once and
-copy it for each test. `CREATE DATABASE ... TEMPLATE` copies the database at the storage level, so a copy stays fast
-(about 60 ms, mostly `docker exec` overhead) even when building the schema and seed data takes much longer:
-
-```csharp
-await postgreSql.CreateTemplateAsync("people_template", async connectionString =>
-{
-    var options = new DbContextOptionsBuilder<PeopleDbContext>().UseNpgsql(connectionString).Options;
-    await using var context = new PeopleDbContext(options);
-    await context.Database.EnsureCreatedAsync();
-});
-
-var connectionString = await postgreSql.CreateDatabaseAsync($"people_{Guid.NewGuid():N}", "people_template");
-```
-
-- `CreateTemplateAsync` creates the database (dropping an existing one with that name), runs your callback with a
-  non-pooled connection string, then marks the database as a template, blocks new connections to it and closes the
-  open ones. PostgreSQL refuses to copy a template that has open connections.
-- `CreateDatabaseAsync` returns the new database's connection string. Without a template it creates an empty database.
-- `DropDatabaseAsync` drops a database (or a template) and closes its connections. `GetConnectionString(database)`
-  returns the connection string for any database in the container.
-
-The SQL runs through `psql` inside the container, so the package doesn't depend on Npgsql. Requires PostgreSQL 13 or
-later. Names are quoted, must be at most 63 bytes (PostgreSQL's identifier limit) and are case-sensitive.
-
-Databases live as long as the container, so drop per-test databases with `DropDatabaseAsync` when a test finishes if
-the container is shared by many tests. `CreateTemplateAsync` drops and re-creates a template with the same name.
-
-### Configuring containers
-
-Container harnesses let you override the image and customize the underlying Testcontainers builder:
-
-```csharp
-var postgreSql = new PostgreSqlHarness
-{
-    Image = "postgres:17",
-    ConfigureContainer = builder => builder
-        .WithEnvironment("TZ", "UTC")
-        .WithResourceMapping("init.sql", "/docker-entrypoint-initdb.d/")
-};
-```
-
-`ConfigureContainer` runs after the harness has applied its own settings, so it can override them (except the
-`RedisHarness` persistence arguments described below).
-
-Any Kafka-compatible broker works with the producer and consumer harnesses (they accept `IKafkaHarness`).
-`KafkaHarness` uses `apache/kafka-native` (a GraalVM build of Apache Kafka) by default: it starts fastest and has the
-smallest image. Use `KafkaHarness.ConfluentImage` for the Confluent Platform image, or `RedpandaHarness` for
-applications that run Redpanda in production:
-
-```csharp
-var kafka = new KafkaHarness { Topics = ["orders"] };
-var confluent = new KafkaHarness { Image = KafkaHarness.ConfluentImage, Topics = ["orders"] };
-var redpanda = new RedpandaHarness { Topics = ["orders"], ConnectionName = "Kafka" };
-var consumer = new KafkaConsumerHarness<string, string>(redpanda) { Topic = "orders" };
-```
-
-### Fast, non-durable databases
-
-Test data does not need to survive a crash, so container harnesses trade durability for speed by default:
-
-- `PostgreSqlHarness` keeps the data directory (`PGDATA`) on tmpfs and runs with `fsync`, `full_page_writes` and
-  `synchronous_commit` off. Nothing is written to disk, which reduces IO load when many containers run in parallel.
-- `RedisHarness` and `RedisStackHarness` disable persistence (no RDB snapshots, no append-only file).
-
-Set `Durable = true` to get the image's durable behaviour instead, for example when a test restarts the server and
-expects the data to survive, or when the database is too large to keep in memory:
-
-```csharp
-var postgreSql = new PostgreSqlHarness { Durable = true };
-```
-
-`PostgreSqlHarness` mounts tmpfs at `/var/lib/postgresql/data`; if `ConfigureContainer` mounts a volume or bind mount
-there, Docker rejects the duplicate mount point, so set `Durable = true` in that case.
-
-`RedisHarness` appends `--save "" --appendonly no` to the container command after `ConfigureContainer` has run, so a
-custom command (`redis-server /usr/local/etc/redis/redis.conf` or extra `--option value` pairs) keeps working, but its
-`save` and `appendonly` settings are overridden unless `Durable = true`. `RedisStackHarness` sets the `REDIS_ARGS`
-environment variable instead; setting `REDIS_ARGS` yourself replaces the harness value.
-
-### Customizing the application under test
-
-Remove background work the test does not need, or host the application through your own `WebApplicationFactory`
-subclass (for example, one that overrides `CreateHost` or `ConfigureWebHost`):
-
-```csharp
-var component = ComponentBuilder.Create(new MyApplicationFactory())
-                                .RemoveHostedService<OutboxPublisher>()
-                                .AddHarness(httpClient)
-                                .Build();
-```
-
-`RemoveHostedService<TService>` runs after the application's own registrations, so it removes hosted services added
-in `Program` (and by `Configure` calls made before it). It matches the exact implementation type of non-keyed
-registrations; a factory registration is matched only when the factory is declared to return `TService`, as
-`AddHostedService(sp => new OutboxPublisher(...))` is. The component does not dispose a factory passed to `Create`.
-
-### Custom harnesses
-
-Derive from `Harness` (override `OnConfigure`, `OnStart`, `OnStop`) to plug in any dependency, or from
-`ContainerHarness<TContainer>` (override `OnCreateContainer`, `GetConnectionString`) for any Testcontainers module.
+[MIT](https://github.com/duskembayev/Enhanced.Testing.Component/blob/main/LICENSE)
