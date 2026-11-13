@@ -22,6 +22,14 @@ public class RedisHarness : ContainerHarness<RedisContainer>
     /// </summary>
     public Func<RedisBuilder, RedisBuilder>? ConfigureContainer { get; init; }
 
+    /// <summary>
+    ///     Keeps the persistence settings of the image or of the command set in <see cref="ConfigureContainer" />
+    ///     (RDB snapshots by default). By default (<see langword="false" />) persistence is disabled: the harness
+    ///     appends <c>--save "" --appendonly no</c> to the container command, after <see cref="ConfigureContainer" />
+    ///     has run, so these two settings win over the ones in a configuration file or earlier arguments.
+    /// </summary>
+    public bool Durable { get; init; }
+
     /// <inheritdoc />
     public override string GetConnectionString() =>
         $"{Container.Hostname}:{Container.GetMappedPublicPort(RedisBuilder.RedisPort)}";
@@ -30,6 +38,13 @@ public class RedisHarness : ContainerHarness<RedisContainer>
     protected override RedisContainer OnCreateContainer()
     {
         var builder = new RedisBuilder(Image);
-        return (ConfigureContainer?.Invoke(builder) ?? builder).Build();
+        builder = ConfigureContainer?.Invoke(builder) ?? builder;
+
+        if (!Durable)
+        {
+            builder = builder.WithCommand("--save", "", "--appendonly", "no");
+        }
+
+        return builder.Build();
     }
 }
