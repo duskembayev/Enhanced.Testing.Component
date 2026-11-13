@@ -3,6 +3,11 @@
 Fixtures below use xUnit v2 (`IAsyncLifetime` returning `Task`) and C# 12. Adapt names to the application: the
 `ConnectionName`/`ConfigurationKey` values must match what the application reads from configuration.
 
+Namespaces: `Enhanced.Testing.Component` plus the package's own (`Enhanced.Testing.Component.Kafka`,
+`.PostgreSql`, `.DbContext`, `.Redis`, `.WireMock`, `.Time`, `.GrpcClient`), `System.Net.Http.Json` for
+`PostAsJsonAsync`, `Microsoft.EntityFrameworkCore` for EF Core queries, and `WireMock.RequestBuilders` and
+`WireMock.ResponseBuilders` for WireMock stubs.
+
 ## Kafka: the app produces, the test checks
 
 ```csharp

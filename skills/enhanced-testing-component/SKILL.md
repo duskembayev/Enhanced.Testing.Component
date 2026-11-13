@@ -2,6 +2,7 @@
 name: enhanced-testing-component
 description: Write and fix component (integration) tests for ASP.NET Core applications with the Enhanced.Testing.Component NuGet packages - hosting the app in memory with real PostgreSQL, Kafka or Redis containers (Testcontainers), EF Core, gRPC, WireMock fakes for external HTTP APIs and a fake TimeProvider. Use when a project references Enhanced.Testing.Component*, when asked to add component/integration tests for an ASP.NET Core service with databases, message brokers or caches, or when such tests are slow, flaky or fail to start.
 license: MIT
+compatibility: Requires the .NET SDK. PostgreSQL, Kafka, Redpanda and Redis harnesses need a running Docker daemon.
 ---
 
 # Enhanced.Testing.Component
@@ -102,8 +103,8 @@ More templates (Kafka, Redis, WireMock, time, gRPC): [references/templates.md](r
 - **Remove background work the test doesn't need** with `ComponentBuilder.Create<Program>().RemoveHostedService<T>()`.
 - **Use the defaults for speed.** Containers start in parallel, Kafka uses `apache/kafka-native`, PostgreSQL and Redis
   run without durability. Only set `Durable = true` when a test needs persistence or mounts its own data volume.
-- **Customize containers through the harness**, not by subclassing: `Image = "postgres:17"`,
-  `ConfigureContainer = b => b.WithEnvironment(...)`.
+- **Customize containers through the harness**, not by subclassing: `Image = "<image>:<tag>"` (each container
+  harness exposes its default as `DefaultImage`), `ConfigureContainer = b => b.WithEnvironment(...)`.
 
 ## When something fails
 
@@ -121,17 +122,20 @@ uses. Read it instead of decompiling or reflecting over the assemblies:
 
 - The packages folder is `~/.nuget/packages` (`%UserProfile%\.nuget\packages` on Windows) unless `NUGET_PACKAGES` is
   set; `dotnet nuget locals global-packages --list` prints it.
-- Take the version from the test project's `PackageReference` (or `obj/project.assets.json`) and the `tfm` closest to
-  the test project's target framework (`net8.0`, `net9.0`, `net10.0`, `net11.0`).
+- Take `<version>` from the test project's `PackageReference` (or from `Directory.Packages.props` with central package
+  management); `obj/project.assets.json` lists the resolved version under `libraries` as `"<package id>/<version>"`.
+  Take the `tfm` folder closest to the test project's target framework (`net8.0`, `net9.0`, `net10.0`, `net11.0`).
 - Members are keyed by documentation IDs: `T:` types, `M:` methods, `P:` properties, for example
   `T:Enhanced.Testing.Component.Kafka.KafkaHarness` or
-  `M:Enhanced.Testing.Component.Kafka.KafkaConsumerHarness`2.WaitForMessageAsync(...)`. Search the file for the type
-  name to see all its members:
+  ``M:Enhanced.Testing.Component.Kafka.KafkaConsumerHarness`2.Seek(Confluent.Kafka.Offset,System.TimeSpan)``
+  (`` `2 `` marks a generic type with two type parameters). Search the file for the type name to see all its members:
 
 ```shell
 grep -A6 'Enhanced.Testing.Component.Kafka.KafkaHarnessExtensions' \
-  ~/.nuget/packages/enhanced.testing.component.kafka/1.4.0/lib/net10.0/Enhanced.Testing.Component.Kafka.xml
+  ~/.nuget/packages/enhanced.testing.component.kafka/<version>/lib/<tfm>/Enhanced.Testing.Component.Kafka.xml
 ```
+
+On Windows without `grep`, use `Select-String -Context 0,6 -Pattern '<type name>' -Path <file>` in PowerShell.
 
 If the project references the library's source instead of the packages, read the `///` comments in `src/` directly.
 

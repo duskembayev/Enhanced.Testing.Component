@@ -4,8 +4,9 @@
 |---|---|---|
 | `DockerUnavailableException` or "Docker is either not running or misconfigured" | Docker isn't running or isn't reachable | Start Docker. Only container harnesses need it. |
 | `CS0122: 'Program' is inaccessible due to its protection level` | Top-level `Program` is internal (before .NET 10) | Add `public partial class Program;` to `Program.cs` or `InternalsVisibleTo` for the test project. |
-| `InvalidOperationException: Component not started.` | A harness member was used before `StartAsync` finished, or the harness wasn't added to the component | Add the harness with `AddHarness`, and use it only after the fixture started. |
-| `InvalidOperationException: The component has been stopped.` | The test used the component after `StopAsync`, or a harness touched it while stopping | Don't use harnesses after the fixture is disposed. |
+| `InvalidOperationException: Component not started.` | A harness was used before the component started it, after the component stopped it, or it was never added with `AddHarness` | Add the harness with `AddHarness`, and use it only between the fixture's start and dispose. |
+| `InvalidOperationException: The component has not been started.` | A harness called the component (`CreateClient`, `Services`) from its own start, before the app started | Call the app from tests, not from a harness's start; an HTTP or gRPC client harness can only be used after `StartAsync` returns. |
+| `InvalidOperationException: The component has been stopped.` | The component was used after `StopAsync`, or a harness touched it while stopping | Don't use the component or its harnesses after the fixture is disposed. |
 | `InvalidOperationException: The component can be started only once.` | `StartAsync` was called twice | Build a new component instead of restarting one. |
 | `NotSupportedException: The harness is already started by a component.` | One harness instance was added to two running components | Create a separate harness instance per component. |
 | A harness can't connect to its container during start | It was added before the harness it depends on | Reorder: add it after its dependency. A dependent *container* needs `StartConcurrently = false`. |

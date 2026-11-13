@@ -30,4 +30,4 @@ Each package ships XML documentation next to its assembly (`<NuGet packages fold
 
 ## Optional
 
-- [Sample application tests](https://github.com/duskembayev/Enhanced.Testing.Component/tree/main/examples/SampleService.Tests): working fixtures for PostgreSQL, Kafka, Redis and gRPC
+- [Sample application tests](https://github.com/duskembayev/Enhanced.Testing.Component/tree/main/examples/SampleService.Tests): working fixtures for PostgreSQL, Kafka, Redis, gRPC, WireMock and time
