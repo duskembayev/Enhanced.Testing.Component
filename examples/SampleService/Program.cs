@@ -8,6 +8,7 @@ var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddGrpc();
 builder.Services.AddHealthChecks();
+builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddHostedService<HeartbeatService>();
 
 builder.Services.AddDbContext<PeopleDbContext>(options =>
@@ -40,6 +41,13 @@ builder.Services.AddHttpClient("Quotes",
 var app = builder.Build();
 
 app.MapHealthChecks("/health");
+app.MapGet("/time", (TimeProvider timeProvider) => timeProvider.GetUtcNow());
+app.MapGet("/delay/{seconds:int}",
+    async (int seconds, TimeProvider timeProvider, CancellationToken cancellationToken) =>
+    {
+        await Task.Delay(TimeSpan.FromSeconds(seconds), timeProvider, cancellationToken);
+        return timeProvider.GetUtcNow();
+    });
 app.MapGrpcService<GreeterService>();
 app.MapGet("/",
     () =>

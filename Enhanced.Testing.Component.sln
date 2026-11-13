@@ -29,6 +29,8 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Enhanced.Testing.Component.
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Enhanced.Testing.Component.Redis", "src\Enhanced.Testing.Component.Redis\Enhanced.Testing.Component.Redis.csproj", "{E579E5D1-D1B0-4BF3-AEEB-31D88721CCA3}"
 EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Enhanced.Testing.Component.Time", "src\Enhanced.Testing.Component.Time\Enhanced.Testing.Component.Time.csproj", "{E75444D6-B3F7-4F7A-908C-7BDF87BEF4B9}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -71,6 +73,10 @@ Global
 		{E579E5D1-D1B0-4BF3-AEEB-31D88721CCA3}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{E579E5D1-D1B0-4BF3-AEEB-31D88721CCA3}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{E579E5D1-D1B0-4BF3-AEEB-31D88721CCA3}.Release|Any CPU.Build.0 = Release|Any CPU
+		{E75444D6-B3F7-4F7A-908C-7BDF87BEF4B9}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{E75444D6-B3F7-4F7A-908C-7BDF87BEF4B9}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{E75444D6-B3F7-4F7A-908C-7BDF87BEF4B9}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{E75444D6-B3F7-4F7A-908C-7BDF87BEF4B9}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -85,6 +91,7 @@ Global
 		{4D0BA942-2908-4173-B276-B8294194D1CF} = {8B5CCDCC-F6D9-4C36-B217-221165D81EE8}
 		{DA6F6445-B8FB-4D3E-8226-69371932BFB8} = {8B5CCDCC-F6D9-4C36-B217-221165D81EE8}
 		{E579E5D1-D1B0-4BF3-AEEB-31D88721CCA3} = {8B5CCDCC-F6D9-4C36-B217-221165D81EE8}
+		{E75444D6-B3F7-4F7A-908C-7BDF87BEF4B9} = {8B5CCDCC-F6D9-4C36-B217-221165D81EE8}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {9FC7CC2D-34E7-43E8-B9AF-F109EFACEA2A}
