@@ -170,6 +170,7 @@ var client = fixture.Grpc.CreateClient<Greeter.GreeterClient>();
 var reply = await client.SayHelloAsync(new HelloRequest { Name = "John" });
 ```
 
-Generate the client in the test project from the service's `.proto` file
-(`<Protobuf Include="..\MyApp\Protos\greet.proto" GrpcServices="Client" />`, with `Grpc.AspNetCore` or `Grpc.Tools`
-plus `Google.Protobuf` referenced).
+When the test project references the service project, generate the client in the service project
+(`<Protobuf Include="Protos\greet.proto" GrpcServices="Both" />`) and don't generate the `.proto` again in the tests;
+duplicate generation causes `CS0436` conflicts. Only if the tests don't reference the service, generate the client in
+the test project (`GrpcServices="Client"`, with `Grpc.AspNetCore` or `Grpc.Tools` plus `Google.Protobuf`).
