@@ -111,6 +111,20 @@ Each package has its own README with examples, which is also shown on nuget.org:
 - [Fast component tests](https://github.com/duskembayev/Enhanced.Testing.Component/blob/main/docs/fast-tests.md): what makes component tests slow and how to speed them up.
 - [Writing a custom harness](https://github.com/duskembayev/Enhanced.Testing.Component/blob/main/docs/custom-harnesses.md): plugging in a dependency the library doesn't cover.
 
+## Using with AI coding agents
+
+The repository includes an [Agent Skill](https://github.com/duskembayev/Enhanced.Testing.Component/blob/main/skills/enhanced-testing-component/SKILL.md)
+that teaches coding agents how to write component tests with these packages: choosing packages, fixture templates,
+rules for fast and deterministic tests, and troubleshooting. It uses the open `SKILL.md` format, supported by Claude
+Code, Codex, GitHub Copilot, Cursor, Gemini CLI and others:
+
+```shell
+npx skills add duskembayev/Enhanced.Testing.Component
+```
+
+Agents without skill support can read [`llms.txt`](https://github.com/duskembayev/Enhanced.Testing.Component/blob/main/llms.txt),
+an index of the documentation. Every package also ships XML documentation, which the skill tells agents how to find.
+
 ## Requirements
 
 - .NET 8, 9, 10 or 11.
