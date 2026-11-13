@@ -8,12 +8,17 @@ namespace Enhanced.Testing.Component.PostgreSql;
 ///     <see cref="IComponentEnvironment" /> or by a test fixture, so every component gets clean data without starting
 ///     a container.
 /// </summary>
+/// <remarks>
+///     The database is dropped when the component stops, also when its creation was interrupted, so a cancelled start
+///     does not leave it behind.
+/// </remarks>
 /// <param name="postgreSql">
 ///     The PostgreSQL harness that runs the container. It must be started before this harness: share it through an
 ///     environment, or add it to the same component before this harness.
 /// </param>
 public class PostgreSqlDatabaseHarness(PostgreSqlHarness postgreSql) : Harness
 {
+    private string? _database;
     private bool _created;
 
     /// <summary>
@@ -23,9 +28,21 @@ public class PostgreSqlDatabaseHarness(PostgreSqlHarness postgreSql) : Harness
     public string? ConnectionName { get; init; }
 
     /// <summary>
-    ///     The database name. By default a unique name is generated for the harness instance.
+    ///     The database name. By default a unique name is generated every time the harness starts, so a harness reused
+    ///     by several components never hands out the name of a dropped database.
     /// </summary>
-    public string Database { get; init; } = $"test_{Guid.NewGuid():N}";
+    /// <remarks>
+    ///     With a fixed name, connections pooled by the previous application instance are closed when the database is
+    ///     dropped, and the next instance can get such a closed connection from the pool. Prefer the generated name
+    ///     when the harness is reused.
+    /// </remarks>
+    public string? Database { get; init; }
+
+    /// <summary>
+    ///     The name of the database created by the current or the last start, or <see langword="null" /> if the
+    ///     harness has not been started.
+    /// </summary>
+    public string? CurrentDatabase => _database;
 
     /// <summary>
     ///     The template database to copy, for example one created by
@@ -46,7 +63,7 @@ public class PostgreSqlDatabaseHarness(PostgreSqlHarness postgreSql) : Harness
     public string GetConnectionString()
     {
         ThrowIfComponentNotStarted();
-        return postgreSql.GetConnectionString(Database);
+        return postgreSql.GetConnectionString(_database!);
     }
 
     /// <inheritdoc />
@@ -63,8 +80,9 @@ public class PostgreSqlDatabaseHarness(PostgreSqlHarness postgreSql) : Harness
     /// <inheritdoc />
     protected override async Task OnStart(CancellationToken cancellationToken)
     {
-        await postgreSql.CreateDatabaseAsync(Database, Template, cancellationToken).ConfigureAwait(false);
+        _database = Database ?? $"test_{Guid.NewGuid():N}";
         _created = true;
+        await postgreSql.CreateDatabaseAsync(_database, Template, cancellationToken).ConfigureAwait(false);
     }
 
     /// <inheritdoc />
@@ -77,7 +95,7 @@ public class PostgreSqlDatabaseHarness(PostgreSqlHarness postgreSql) : Harness
 
         if (postgreSql.IsStarted)
         {
-            await postgreSql.DropDatabaseAsync(Database, cancellationToken).ConfigureAwait(false);
+            await postgreSql.DropDatabaseAsync(_database!, cancellationToken).ConfigureAwait(false);
         }
 
         _created = false;

@@ -108,7 +108,8 @@ await using var component = await fixture.Environment
 |---|---|---|
 | `ConnectionName` | none | Passes the database's connection string as `ConnectionStrings:{ConnectionName}`, overriding the one set by `PostgreSqlHarness` |
 | `Template` | none | The template database to copy; without it the database is empty |
-| `Database` | `test_<guid>` | The database name |
+| `Database` | `test_<guid>`, new on every start | The database name; `CurrentDatabase` returns the one in use |
 
-`GetConnectionString()` returns the connection string to the test. In a component that also owns the
+`GetConnectionString()` returns the connection string to the test. The database is dropped when the component stops,
+even if its start was cancelled. In a component that also owns the
 `PostgreSqlHarness`, add the database harness after it.

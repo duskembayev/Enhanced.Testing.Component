@@ -70,14 +70,14 @@ public class OrdersEnvironment : IAsyncLifetime
 {
     public PostgreSqlHarness PostgreSql { get; } = new() { ConnectionName = "Orders" };
 
-    public IComponentEnvironment Environment { get; private set; } = null!;
+    public IComponentEnvironment? Environment { get; private set; }
 
     public async Task InitializeAsync() =>
         Environment = await ComponentEnvironment.Create()
                                                 .AddHarness(PostgreSql)
                                                 .StartAsync();
 
-    public Task DisposeAsync() => Environment.StopAsync();
+    public Task DisposeAsync() => Environment?.StopAsync() ?? Task.CompletedTask;
 }
 
 public class OrdersTests(OrdersEnvironment fixture) : IClassFixture<OrdersEnvironment>
@@ -87,7 +87,7 @@ public class OrdersTests(OrdersEnvironment fixture) : IClassFixture<OrdersEnviro
     {
         var http = new HttpClientHarness();
 
-        await using var component = await fixture.Environment
+        await using var component = await fixture.Environment!
                                                  .CreateComponent<Program>(builder =>
                                                      builder.UseSetting("Catalog:Warmup", "true"))
                                                  .AddHarness(http)
@@ -101,13 +101,18 @@ public class OrdersTests(OrdersEnvironment fixture) : IClassFixture<OrdersEnviro
 ```
 
 - The environment starts its harnesses once (containers in parallel) and applies their configuration, such as
-  connection strings, and its own `Configure` calls to every component created from it.
+  connection strings, and its own `Configure` calls to every component created from it, in the order they were made.
+  Container harnesses and `WireMockHarness` can be shared this way; derive a custom harness from `EnvironmentHarness`
+  to make it shareable.
 - `CreateComponent<TEntryPoint>()` returns a builder for a new component with its own application host. Add the
   harnesses that work with this application instance to it: HTTP and gRPC clients, `DbContextHarness`, Kafka
   producers and consumers, `RedisDatabaseHarness`, `PostgreSqlDatabaseHarness` for a database of its own. A builder
   builds one component; `StartAsync()` on the builder builds and starts it.
 - Stopping or disposing a component stops its application and its own harnesses; the environment's containers keep
-  running. Stopping the environment stops the components still running, then its harnesses in reverse order.
+  running. Stopping the environment waits for components that are still starting, stops the components still
+  running, then its harnesses in reverse order.
+- With `await using`, an exception thrown while the component stops replaces an exception from the test body. Call
+  `StopAsync` in a `finally` block of your own if you need both.
 - A harness instance is used by one running component or environment at a time. It can be reused after its owner
   stops. Container harnesses can belong to either; other harnesses belong to a component.
 

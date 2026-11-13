@@ -129,7 +129,7 @@ public class OrdersEnvironment : IAsyncLifetime
 {
     public PostgreSqlHarness PostgreSql { get; } = new() { ConnectionName = "Orders" };
 
-    public IComponentEnvironment Environment { get; private set; } = null!;
+    public IComponentEnvironment? Environment { get; private set; }
 
     public async Task InitializeAsync()
     {
@@ -143,7 +143,7 @@ public class OrdersEnvironment : IAsyncLifetime
         });
     }
 
-    public Task DisposeAsync() => Environment.StopAsync();
+    public Task DisposeAsync() => Environment?.StopAsync() ?? Task.CompletedTask;
 }
 
 public class OrdersTests(OrdersEnvironment fixture) : IClassFixture<OrdersEnvironment>
@@ -158,7 +158,7 @@ public class OrdersTests(OrdersEnvironment fixture) : IClassFixture<OrdersEnviro
         var ordersDb = new DbContextHarness<OrdersDbContext>();
         var http = new HttpClientHarness();
 
-        await using var component = await fixture.Environment
+        await using var component = await fixture.Environment!
                                                  .CreateComponent<Program>()
                                                  .AddHarness(orders)
                                                  .AddHarness(ordersDb)

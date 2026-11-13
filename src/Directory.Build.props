@@ -27,7 +27,7 @@
 
   <PropertyGroup Condition="'$(PackageValidationBaselineVersion)' != ''">
     <EnablePackageValidation>true</EnablePackageValidation>
-    <DisablePackageBaselineValidation Condition="$([MSBuild]::VersionLessThan('$(PackageValidationBaselineVersion)', '$(MinVerMinimumMajorMinor).0'))">true</DisablePackageBaselineValidation>
+    <DisablePackageBaselineValidation Condition="$([System.Version]::Parse('$(PackageValidationBaselineVersion)').Major) &lt; $([System.Version]::Parse('$(MinVerMinimumMajorMinor)').Major)">true</DisablePackageBaselineValidation>
   </PropertyGroup>
 
   <ItemGroup>

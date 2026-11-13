@@ -2,10 +2,12 @@ namespace Enhanced.Testing.Component;
 
 internal sealed class RunningComponentEnvironment : IComponentEnvironment
 {
-    private readonly List<IComponent> _components = [];
+    private readonly List<IEnvironmentComponent> _components = [];
     private readonly IReadOnlyList<Action<IWebHostBuilder>> _configurations;
     private readonly IReadOnlyList<IEnvironmentHarness> _harnesses;
     private readonly List<IEnvironmentHarness> _startedHarnesses = [];
+    private readonly HashSet<IEnvironmentHarness> _scheduledHarnesses = new(ReferenceEqualityComparer.Instance);
+    private readonly SemaphoreSlim _stopLock = new(1, 1);
     private readonly object _sync = new();
     private EnvironmentState _state;
 
@@ -29,11 +31,6 @@ internal sealed class RunningComponentEnvironment : IComponentEnvironment
                 configuration(builder);
             }
 
-            foreach (var harness in _harnesses)
-            {
-                harness.OnConfigure(builder);
-            }
-
             configure?.Invoke(builder);
         });
 
@@ -42,7 +39,28 @@ internal sealed class RunningComponentEnvironment : IComponentEnvironment
 
     public async Task StopAsync(CancellationToken cancellationToken = default)
     {
-        List<IComponent> components;
+        try
+        {
+            await _stopLock.WaitAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw new OperationCanceledException(cancellationToken);
+        }
+
+        try
+        {
+            await StopCoreAsync(cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            _stopLock.Release();
+        }
+    }
+
+    private async Task StopCoreAsync(CancellationToken cancellationToken)
+    {
+        List<IEnvironmentComponent> components;
 
         lock (_sync)
         {
@@ -59,7 +77,11 @@ internal sealed class RunningComponentEnvironment : IComponentEnvironment
 
         var cancelled = await Lifecycle.StopInReverseAsync(
                 components,
-                component => component.StopAsync(cancellationToken),
+                async component =>
+                {
+                    await component.WaitForStartAsync().ConfigureAwait(false);
+                    await component.StopAsync(cancellationToken).ConfigureAwait(false);
+                },
                 exceptions,
                 cancellationToken)
             .ConfigureAwait(false);
@@ -90,15 +112,13 @@ internal sealed class RunningComponentEnvironment : IComponentEnvironment
 
     internal async Task StartAsync(CancellationToken cancellationToken)
     {
-        _state = EnvironmentState.Starting;
-
         try
         {
             var starts = new List<Task>();
 
             foreach (var harness in _harnesses)
             {
-                if (harness is not IConcurrentStartDependency { StartConcurrently: true } || _startedHarnesses.Contains(harness))
+                if (harness is not IConcurrentStartDependency { StartConcurrently: true } || !_scheduledHarnesses.Add(harness))
                 {
                     continue;
                 }
@@ -112,7 +132,7 @@ internal sealed class RunningComponentEnvironment : IComponentEnvironment
 
             foreach (var harness in _harnesses)
             {
-                if (_startedHarnesses.Contains(harness))
+                if (!_scheduledHarnesses.Add(harness))
                 {
                     continue;
                 }
@@ -140,7 +160,7 @@ internal sealed class RunningComponentEnvironment : IComponentEnvironment
         }
     }
 
-    internal void Attach(IComponent component)
+    internal void Attach(IEnvironmentComponent component)
     {
         lock (_sync)
         {
@@ -149,7 +169,7 @@ internal sealed class RunningComponentEnvironment : IComponentEnvironment
         }
     }
 
-    internal void Detach(IComponent component)
+    internal void Detach(IEnvironmentComponent component)
     {
         lock (_sync)
         {
@@ -168,7 +188,6 @@ internal sealed class RunningComponentEnvironment : IComponentEnvironment
     private enum EnvironmentState
     {
         Created,
-        Starting,
         Started,
         Stopping,
         Stopped

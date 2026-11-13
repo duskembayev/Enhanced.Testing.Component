@@ -243,6 +243,15 @@ public abstract class KafkaBrokerTests<TFixture>(TFixture fixture) : IClassFixtu
         consumer.SeekToBeginning();
 
         Assert.Equal("1", (await consumer.WaitForKeyAsync("earlier", MessageTimeout)).Value);
+
+        var delivered = await producer.ProduceAsync(new TopicPartition(topic, 0),
+            new Message<string, string> { Key = "delivered", Value = "0" });
+        await consumer.WaitForKeyAsync("delivered", MessageTimeout);
+
+        consumer.Seek(delivered.TopicPartitionOffset);
+
+        var replayed = await consumer.WaitForMessageAsync(_ => true, MessageTimeout);
+        Assert.Equal("delivered", replayed.Message.Key);
     }
 
     private async Task<string> RunIsolatedScenarioAsync(string value)

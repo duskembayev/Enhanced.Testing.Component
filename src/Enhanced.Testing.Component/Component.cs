@@ -2,12 +2,13 @@ using Microsoft.AspNetCore.TestHost;
 
 namespace Enhanced.Testing.Component;
 
-internal sealed class Component<TEntryPoint> : IComponent where TEntryPoint : class
+internal sealed class Component<TEntryPoint> : IEnvironmentComponent where TEntryPoint : class
 {
     private readonly WebApplicationFactory<TEntryPoint> _appFactory;
     private readonly IReadOnlyList<IComponentDependency> _dependencies;
     private readonly RunningComponentEnvironment? _environment;
     private readonly bool[] _startedDependencies;
+    private Task? _start;
     private bool _appDisposed;
     private ComponentState _state;
 
@@ -75,7 +76,28 @@ internal sealed class Component<TEntryPoint> : IComponent where TEntryPoint : cl
 
         _environment?.Attach(this);
         _state = ComponentState.Starting;
+        _start = StartCoreAsync(cancellationToken);
+        await _start.ConfigureAwait(false);
+    }
 
+    public async Task WaitForStartAsync()
+    {
+        if (_start is null)
+        {
+            return;
+        }
+
+        try
+        {
+            await _start.ConfigureAwait(false);
+        }
+        catch
+        {
+        }
+    }
+
+    private async Task StartCoreAsync(CancellationToken cancellationToken)
+    {
         try
         {
             await StartContainersAsync(cancellationToken).ConfigureAwait(false);

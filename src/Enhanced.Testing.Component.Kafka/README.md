@@ -55,8 +55,10 @@ Non-matching messages are skipped; a `TimeoutException` reports how many. `SeekT
 position the wait starts from.
 
 Consumers read every partition of the topic. Messages from different partitions arrive in no particular order
-relative to each other, which is another reason to wait for a specific message rather than the next one. `Seek` with
-an absolute offset moves every partition to that offset.
+relative to each other, which is another reason to wait for a specific message rather than the next one. A consumer
+reads the partitions the topic has when it is created. `Seek(result.TopicPartitionOffset)` moves one partition to a
+known offset, for example from a delivery result, and the others to the end; `Seek(offset)` with an absolute offset
+works only for single-partition topics.
 
 ## A topic per test
 

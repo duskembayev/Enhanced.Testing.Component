@@ -9,6 +9,7 @@ internal sealed class ComponentEnvironmentBuilder : IComponentEnvironmentBuilder
     {
         ArgumentNullException.ThrowIfNull(harness);
         _harnesses.Add(harness);
+        _configurations.Add(harness.OnConfigure);
         return this;
     }
 

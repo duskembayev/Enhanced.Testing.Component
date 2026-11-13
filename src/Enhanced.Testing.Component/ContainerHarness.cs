@@ -8,7 +8,7 @@ namespace Enhanced.Testing.Component;
 /// <typeparam name="TContainer">
 ///     The type of the container.
 /// </typeparam>
-public abstract class ContainerHarness<TContainer> : Harness, IConcurrentStartDependency, IEnvironmentHarness
+public abstract class ContainerHarness<TContainer> : EnvironmentHarness, IConcurrentStartDependency
     where TContainer : IContainer
 {
     private TContainer? _container;
@@ -55,12 +55,6 @@ public abstract class ContainerHarness<TContainer> : Harness, IConcurrentStartDe
 
         webHostBuilder.UseSetting("ConnectionStrings:" + ConnectionName, GetConnectionString());
     }
-
-    Task IEnvironmentHarness.OnStartAsync(IComponentEnvironment environment, CancellationToken cancellationToken) =>
-        AttachAsync(environment, null, cancellationToken);
-
-    Task IEnvironmentHarness.OnStopAsync(IComponentEnvironment environment, CancellationToken cancellationToken) =>
-        DetachAsync(environment, cancellationToken);
 
     /// <inheritdoc />
     protected override async Task OnStart(CancellationToken cancellationToken)

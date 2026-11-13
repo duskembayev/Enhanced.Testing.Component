@@ -7,6 +7,8 @@ using Enhanced.Testing.Component.PostgreSql;
 using Enhanced.Testing.Component.Redis;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 using Npgsql;
 using SampleService.Models;
 using SampleService.Services;
@@ -173,13 +175,103 @@ public class EnvironmentTests(SampleEnvironmentFixture fixture) : IClassFixture<
             Assert.Equal(["Alice"], await GetCachedPeopleAsync(secondClient));
             Assert.Equal(2, await firstDbContext.ExecuteAsync((dbContext, cancellationToken) =>
                 dbContext.Persons.CountAsync(cancellationToken)));
-            Assert.True(await DatabaseExistsAsync(firstDatabase.Database));
+            Assert.True(await DatabaseExistsAsync(firstDatabase.CurrentDatabase!));
         }
 
-        Assert.False(await DatabaseExistsAsync(firstDatabase.Database));
-        Assert.False(await DatabaseExistsAsync(secondDatabase.Database));
+        Assert.False(await DatabaseExistsAsync(firstDatabase.CurrentDatabase!));
+        Assert.False(await DatabaseExistsAsync(secondDatabase.CurrentDatabase!));
         Assert.False(firstDatabase.IsStarted);
         Assert.True(fixture.PostgreSql.IsStarted);
+    }
+
+    [Fact]
+    public async Task ShouldGiveReusedDatabaseHarnessNewDatabaseOnEveryStart()
+    {
+        var database = new PostgreSqlDatabaseHarness(fixture.PostgreSql)
+        {
+            ConnectionName = PeopleDbContext.ConnectionStringName
+        };
+        var dbContext = new DbContextHarness<PeopleDbContext>();
+        dbContext.EnsureCreatedOnStart(builder => builder.UseNpgsql(database.GetConnectionString()));
+        var names = new List<string>();
+
+        for (var i = 0; i < 3; i++)
+        {
+            var http = new HttpClientHarness();
+
+            await using (await fixture.Environment
+                                      .CreateComponent<Program>()
+                                      .AddHarness(database)
+                                      .AddHarness(dbContext)
+                                      .AddHarness(http)
+                                      .StartAsync())
+            {
+                Assert.Empty(await GetCachedPeopleAsync(http));
+                names.Add(database.CurrentDatabase!);
+            }
+        }
+
+        Assert.Equal(3, names.Distinct().Count());
+    }
+
+    [Fact]
+    public async Task ShouldWaitForStartingComponentWhenStopped()
+    {
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var environment = await ComponentEnvironment.Create().StartAsync();
+        var http = new HttpClientHarness();
+        var start = environment.CreateComponent<Program>()
+                               .AddDependency(new BlockingDependency(entered, release))
+                               .AddHarness(http)
+                               .StartAsync();
+
+        await entered.Task;
+        var stop = environment.StopAsync();
+
+        Assert.False(stop.IsCompleted);
+        release.SetResult();
+
+        var component = await start;
+        await stop;
+
+        Assert.Throws<InvalidOperationException>(() => component.Services);
+        Assert.False(http.IsStarted);
+    }
+
+    [Fact]
+    public async Task ShouldApplyEnvironmentConfigurationInCallOrder()
+    {
+        await using var environment = await ComponentEnvironment.Create()
+                                                                .AddHarness(new RedisHarness { ConnectionName = "Ordered" })
+                                                                .Configure(builder =>
+                                                                    builder.UseSetting("ConnectionStrings:Ordered", "configured"))
+                                                                .StartAsync();
+
+        await using var component = await environment.CreateComponent<Program>().StartAsync();
+
+        var configuration = component.Services.GetRequiredService<IConfiguration>();
+        Assert.Equal("configured", configuration.GetConnectionString("Ordered"));
+    }
+
+    [Fact]
+    public async Task ShouldAllowConcurrentStops()
+    {
+        var environment = await ComponentEnvironment.Create().AddHarness(new RedisHarness()).StartAsync();
+
+        await Task.WhenAll(environment.StopAsync(), environment.DisposeAsync().AsTask());
+    }
+
+    private sealed class BlockingDependency(TaskCompletionSource entered, TaskCompletionSource release)
+        : IComponentDependency
+    {
+        public async Task OnStartAsync(IComponent component, CancellationToken cancellationToken)
+        {
+            entered.SetResult();
+            await release.Task;
+        }
+
+        public Task OnStopAsync(IComponent component, CancellationToken cancellationToken) => Task.CompletedTask;
     }
 
     private PostgreSqlDatabaseHarness CreateDatabaseHarness(string template) =>

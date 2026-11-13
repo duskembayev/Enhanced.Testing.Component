@@ -26,7 +26,8 @@ public interface IEnvironmentHarness
     Task OnStartAsync(IComponentEnvironment environment, CancellationToken cancellationToken);
 
     /// <summary>
-    ///     Called when the environment is stopped, after all of its components have been stopped.
+    ///     Called when the environment is stopped, after it has tried to stop its running components. It is called even
+    ///     if a component failed to stop.
     /// </summary>
     /// <param name="environment">
     ///     The environment.
