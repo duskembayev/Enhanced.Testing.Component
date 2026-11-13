@@ -8,7 +8,8 @@ namespace Enhanced.Testing.Component.Kafka;
 /// <remarks>
 ///     Create it with
 ///     <see cref="KafkaHarnessExtensions.CreateConsumerAsync{TKey, TValue}" /> and dispose it at the end of the test.
-///     It reads every partition of the topic. It is not thread-safe: do not consume, wait or seek concurrently.
+///     It reads every partition the topic has when the consumer is created; partitions added later are not read. It is
+///     not thread-safe: do not consume, wait or seek concurrently.
 /// </remarks>
 /// <typeparam name="TKey">
 ///     The message key type.
@@ -115,6 +116,22 @@ public sealed class KafkaTestConsumer<TKey, TValue> : IDisposable
     {
         ThrowIfDisposed();
         _reader.Seek(Offset.End, null);
+    }
+
+    /// <summary>
+    ///     Moves the position of one partition to the specified offset, for example the one from a delivery result,
+    ///     and the other partitions to the end of the topic.
+    /// </summary>
+    /// <param name="position">
+    ///     The partition and offset to seek to.
+    /// </param>
+    /// <exception cref="ArgumentException">
+    ///     Thrown if <paramref name="position" /> is not in a partition of the consumed topic.
+    /// </exception>
+    public void Seek(TopicPartitionOffset position)
+    {
+        ThrowIfDisposed();
+        _reader.Seek(position, null);
     }
 
     /// <summary>

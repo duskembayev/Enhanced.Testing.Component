@@ -11,7 +11,7 @@ namespace Enhanced.Testing.Component.WireMock;
 ///     The server starts when the component starts and stops when the component stops. The harness can be added to
 ///     another component after the previous one has stopped; each start creates a new server.
 /// </remarks>
-public class WireMockHarness : Harness
+public class WireMockHarness : EnvironmentHarness
 {
     private WireMockServer? _server;
 

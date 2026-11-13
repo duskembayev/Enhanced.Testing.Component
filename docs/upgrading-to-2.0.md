@@ -15,14 +15,20 @@ attention.
   and stops a component. The cancellation tokens of `StartAsync` and `StopAsync` are optional.
 - **`DbContextHarness.ExecuteAsync`** has overloads whose action receives the cancellation token.
 - **`Harness.IsStarted`** tells whether a harness is running.
+- **`EnvironmentHarness`** is the base class for harnesses an environment can share. `ContainerHarness<TContainer>`
+  and `WireMockHarness` derive from it.
+- **`KafkaConsumerHarness.Seek(TopicPartitionOffset)`** and `KafkaTestConsumer.Seek(TopicPartitionOffset)` move one
+  partition to a known offset, such as the one in a delivery result.
 
 ## Breaking changes
 
 | Change | What to do |
 |---|---|
-| Kafka consumers (`KafkaConsumerHarness`, `CreateConsumerAsync`) read every partition of the topic instead of partition 0 | Nothing for single-partition topics. With several partitions, messages from all of them now arrive, in no particular order across partitions: wait for a specific key or predicate. |
-| `KafkaConsumerHarness.Seek(Offset, TimeSpan)` became `Seek(Offset, TimeSpan? timeout = null)`, and the `Seek(Offset, int)` extension was removed | Call `Seek(offset)` or pass a `TimeSpan`. An absolute offset now applies to every partition. |
+| Kafka consumers (`KafkaConsumerHarness`, `CreateConsumerAsync`) read every partition the topic has when they start, instead of partition 0 | Nothing for single-partition topics. With several partitions, messages from all of them now arrive, in no particular order across partitions: wait for a specific key or predicate. |
+| `KafkaConsumerHarness.Seek(Offset, TimeSpan)` became `Seek(Offset, TimeSpan? timeout = null)`, and the `Seek(Offset, int)` extension was removed | Call `Seek(offset)` or pass a `TimeSpan`. An absolute offset throws `InvalidOperationException` for a topic with several partitions; use `Seek(TopicPartitionOffset)`. |
 | `KafkaProducerHarness.ProduceAsync` returns `Task<DeliveryResult<TKey, TValue>>` instead of `Task` | Recompile. Code that awaits it keeps working. |
+| `DbContextHarness.ExecuteAsync` has overloads whose action takes a `CancellationToken` | Passing a method group that has overloads with and without a token (`ExecuteAsync(SeedAsync)`) is ambiguous (CS0121): pass a lambda instead. |
+| `ContainerHarness<TContainer>` and `WireMockHarness` derive from `EnvironmentHarness` | No action; they can now be added to an environment. |
 | `IComponent` extends `IAsyncDisposable` | Only custom `IComponent` implementations need a `DisposeAsync` method. |
 | A component builder builds one component: a second `Build()` throws | Create a new builder for each component. |
 | Harness errors read `The harness is not started.` and `The harness is already started by another component or environment.` | Update assertions that match the old messages. |

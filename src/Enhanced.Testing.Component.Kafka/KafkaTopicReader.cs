@@ -45,12 +45,13 @@ internal sealed class KafkaTopicReader<TKey, TValue> : IDisposable
 
         try
         {
-            partitions = await GetPartitionsAsync(consumer, topic, cancellationToken).ConfigureAwait(false);
+            var deadline = DateTime.UtcNow + StartTimeout;
+            partitions = await GetPartitionsAsync(consumer, topic, deadline, cancellationToken).ConfigureAwait(false);
             var offsets = new List<TopicPartitionOffset>(partitions.Count);
 
             foreach (var partition in partitions)
             {
-                var watermarks = await QueryWatermarkOffsetsAsync(consumer, partition, cancellationToken)
+                var watermarks = await QueryWatermarkOffsetsAsync(consumer, partition, deadline, cancellationToken)
                                      .ConfigureAwait(false);
 
                 offsets.Add(new TopicPartitionOffset(partition, watermarks.High));
@@ -69,30 +70,68 @@ internal sealed class KafkaTopicReader<TKey, TValue> : IDisposable
 
     public void Seek(Offset offset, TimeSpan? timeout)
     {
-        var queryTimeout = timeout is null || timeout == Timeout.InfiniteTimeSpan ? StartTimeout : timeout.Value;
+        if (!offset.IsSpecial)
+        {
+            if (_partitions.Count != 1)
+            {
+                throw new InvalidOperationException(
+                    $"Kafka topic '{Topic}' has {_partitions.Count} partitions. " +
+                    "Seek to an offset of a specific partition with Seek(TopicPartitionOffset).");
+            }
 
-        if (offset.IsSpecial && offset != Offset.Beginning && offset != Offset.End)
+            Consumer.Assign(new TopicPartitionOffset(_partitions[0], offset));
+            return;
+        }
+
+        if (offset != Offset.Beginning && offset != Offset.End)
         {
             throw new NotSupportedException("Offset kind is not supported.");
         }
 
-        var offsets = new List<TopicPartitionOffset>(_partitions.Count);
+        var deadline = GetDeadline(timeout);
+        var offsets = _partitions.Select(p => new TopicPartitionOffset(p, GetWatermark(p, offset, deadline))).ToList();
+        Consumer.Assign(offsets);
+    }
 
-        foreach (var partition in _partitions)
+    public void Seek(TopicPartitionOffset position, TimeSpan? timeout)
+    {
+        ArgumentNullException.ThrowIfNull(position);
+
+        if (position.Topic != Topic || !_partitions.Contains(position.TopicPartition))
         {
-            if (!offset.IsSpecial)
-            {
-                offsets.Add(new TopicPartitionOffset(partition, offset));
-                continue;
-            }
-
-            var watermarks = Consumer.QueryWatermarkOffsets(partition, queryTimeout)
-                             ?? throw new InvalidOperationException("Failed to query watermark offsets.");
-
-            offsets.Add(new TopicPartitionOffset(partition, offset == Offset.Beginning ? watermarks.Low : watermarks.High));
+            throw new ArgumentException(
+                $"The position must be in a partition of Kafka topic '{Topic}' known to the consumer.", nameof(position));
         }
 
+        if (position.Offset.IsSpecial && position.Offset != Offset.Beginning && position.Offset != Offset.End)
+        {
+            throw new NotSupportedException("Offset kind is not supported.");
+        }
+
+        var deadline = GetDeadline(timeout);
+        var offsets = _partitions.Select(p => p == position.TopicPartition
+                                     ? new TopicPartitionOffset(p,
+                                         position.Offset.IsSpecial ? GetWatermark(p, position.Offset, deadline) : position.Offset)
+                                     : new TopicPartitionOffset(p, GetWatermark(p, Offset.End, deadline)))
+                                 .ToList();
+
         Consumer.Assign(offsets);
+    }
+
+    private static DateTime GetDeadline(TimeSpan? timeout) =>
+        DateTime.UtcNow + (timeout is null || timeout == Timeout.InfiniteTimeSpan ? StartTimeout : timeout.Value);
+
+    private Offset GetWatermark(TopicPartition partition, Offset offset, DateTime deadline)
+    {
+        var remaining = deadline - DateTime.UtcNow;
+
+        if (remaining <= TimeSpan.Zero)
+        {
+            throw new TimeoutException($"Failed to query the offsets of Kafka topic '{Topic}' in time.");
+        }
+
+        var watermarks = Consumer.QueryWatermarkOffsets(partition, remaining);
+        return offset == Offset.Beginning ? watermarks.Low : watermarks.High;
     }
 
     public Task<ConsumeResult<TKey, TValue>> WaitForMessageAsync(Func<ConsumeResult<TKey, TValue>, bool> predicate,
@@ -150,12 +189,11 @@ internal sealed class KafkaTopicReader<TKey, TValue> : IDisposable
     }
 
     private static async Task<IReadOnlyList<TopicPartition>> GetPartitionsAsync(IConsumer<TKey, TValue> consumer,
-        string topic, CancellationToken cancellationToken)
+        string topic, DateTime deadline, CancellationToken cancellationToken)
     {
         using var adminClient = new DependentAdminClientBuilder(consumer.Handle).Build();
 
-        var deadline = DateTime.UtcNow + StartTimeout;
-        var lastError = "no metadata received";
+        Error? lastError = null;
 
         while (true)
         {
@@ -174,19 +212,22 @@ internal sealed class KafkaTopicReader<TKey, TValue> : IDisposable
                                         .ToList();
                 }
 
-                lastError = topicMetadata?.Error.IsError == true
-                    ? topicMetadata.Error.Reason
-                    : "the topic has no partitions";
+                lastError = topicMetadata?.Error.IsError == true ? topicMetadata.Error : null;
             }
             catch (KafkaException exception)
             {
-                lastError = exception.Error.Reason;
+                lastError = exception.Error;
             }
 
             if (DateTime.UtcNow >= deadline)
             {
+                if (lastError is not null)
+                {
+                    throw new KafkaException(lastError);
+                }
+
                 throw new TimeoutException(
-                    $"Failed to get the partitions of Kafka topic '{topic}' within {StartTimeout.TotalSeconds:0} s: {lastError}.");
+                    $"Kafka topic '{topic}' has no partitions after {StartTimeout.TotalSeconds:0} s.");
             }
 
             await Task.Delay(RetryDelay, cancellationToken).ConfigureAwait(false);
@@ -194,10 +235,8 @@ internal sealed class KafkaTopicReader<TKey, TValue> : IDisposable
     }
 
     private static async Task<WatermarkOffsets> QueryWatermarkOffsetsAsync(IConsumer<TKey, TValue> consumer,
-        TopicPartition partition, CancellationToken cancellationToken)
+        TopicPartition partition, DateTime deadline, CancellationToken cancellationToken)
     {
-        var deadline = DateTime.UtcNow + StartTimeout;
-
         while (true)
         {
             cancellationToken.ThrowIfCancellationRequested();

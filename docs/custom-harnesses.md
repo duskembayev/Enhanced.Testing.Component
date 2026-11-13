@@ -52,3 +52,11 @@ started; `ThrowIfComponentNotStarted` guards members that need it.
 
 The harnesses in this repository are good examples: `HttpClientHarness` is a few lines, `WireMockHarness` runs an
 in-process server, and `KafkaHarness` extends a container harness with topic creation.
+
+## A harness an environment can share
+
+A `ComponentEnvironment` accepts harnesses derived from `EnvironmentHarness`. Container harnesses already are; derive
+from `EnvironmentHarness` instead of `Harness` when a dependency that is not a container, such as an in-process fake
+server, should be started once and shared by the components of an environment. Such a harness must not use
+`Component`: when an environment owns it, there is no single application to talk to. See
+[Environments](lifecycle.md#environments).
