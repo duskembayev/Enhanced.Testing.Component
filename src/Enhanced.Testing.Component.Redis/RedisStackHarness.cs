@@ -41,6 +41,12 @@ public class RedisStackHarness : ContainerHarness<RedisContainer>
 
     private readonly int? _defaultDatabase;
 
+    /// <summary>
+    ///     Keeps the image's default persistence (RDB snapshots). By default (<see langword="false" />)
+    ///     persistence is disabled: no RDB snapshots and no append-only file.
+    /// </summary>
+    public bool Durable { get; init; }
+
     /// <inheritdoc />
     public override string GetConnectionString() =>
         RedisConnectionString.Build(Container.Hostname, Container.GetMappedPublicPort(RedisBuilder.RedisPort),
@@ -50,6 +56,12 @@ public class RedisStackHarness : ContainerHarness<RedisContainer>
     protected override RedisContainer OnCreateContainer()
     {
         var builder = new RedisBuilder(Image);
+
+        if (!Durable)
+        {
+            builder = builder.WithEnvironment("REDIS_ARGS", "--save --appendonly no");
+        }
+
         return (ConfigureContainer?.Invoke(builder) ?? builder).Build();
     }
 }

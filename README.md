@@ -80,9 +80,13 @@ PostgreSQL, Kafka and Redis run as real containers via [Testcontainers](https://
 
 ### Managed lifecycle
 
-`StartAsync` starts the harnesses in the order they were added, then the application. `StopAsync` stops the
-application first, then the harnesses in reverse order, and removes their containers. Add a harness after the
-harnesses it depends on (for example, `DbContextHarness` after `PostgreSqlHarness`).
+`StartAsync` starts all container harnesses (`ContainerHarness<TContainer>`) concurrently, so the startup time of
+several containers does not add up. It then starts the other harnesses in the order they were added, and finally the
+application. If anything fails to start, everything started so far is stopped again. `StopAsync` stops the application
+first, then the harnesses in reverse order, and removes their containers. Add a harness after the harnesses it depends
+on (for example, `DbContextHarness` after `PostgreSqlHarness`). A container harness that needs another harness while it
+starts (for example, a container connecting to another container) must be created with `StartConcurrently = false`;
+it is then started with the other harnesses in the order it was added.
 
 ### Clients for the application under test
 
@@ -105,6 +109,19 @@ without opening network ports.
 
   Non-matching messages are skipped; a `TimeoutException` reports how many. `SeekToBeginning`/`SeekToEnd` move the
   position the wait starts from.
+
+  To let tests share one broker and still run in parallel, give each test its own topic. `CreateUniqueTopicAsync`
+  creates a topic with a unique name and waits for its leader; `CreateConsumerAsync` and `CreateProducerAsync` return
+  disposable clients bound to it, with the same `WaitFor*` API:
+
+  ```csharp
+  var topic = await kafka.CreateUniqueTopicAsync("orders");
+  using var consumer = await kafka.CreateConsumerAsync<string, string>(topic);
+  using var producer = await kafka.CreateProducerAsync<string, string>(topic);
+
+  await producer.ProduceAsync("order-42", "created");
+  var message = await consumer.WaitForKeyAsync("order-42", TimeSpan.FromSeconds(10));
+  ```
 - `RedisDatabaseHarness` gives direct access to the Redis database (`Database`). `DatabaseNumber` selects a database
   index and `KeyPrefix` scopes its keys; `FlushAsync` deletes the harness's data (keys with `KeyPrefix` when set,
   otherwise the whole database). To keep fixtures that share one Redis server apart, give each application its own
@@ -132,6 +149,9 @@ var postgreSql = new PostgreSqlHarness
 };
 ```
 
+`ConfigureContainer` runs after the harness has applied its own settings, so it can override them (except the
+`RedisHarness` persistence arguments described below).
+
 Any Kafka-compatible broker works with the producer and consumer harnesses (they accept `IKafkaHarness`).
 `KafkaHarness` uses `apache/kafka-native` (a GraalVM build of Apache Kafka) by default: it starts fastest and has the
 smallest image. Use `KafkaHarness.ConfluentImage` for the Confluent Platform image, or `RedpandaHarness` for
@@ -143,6 +163,46 @@ var confluent = new KafkaHarness { Image = KafkaHarness.ConfluentImage, Topics =
 var redpanda = new RedpandaHarness { Topics = ["orders"], ConnectionName = "Kafka" };
 var consumer = new KafkaConsumerHarness<string, string>(redpanda) { Topic = "orders" };
 ```
+
+### Fast, non-durable databases
+
+Test data does not need to survive a crash, so container harnesses trade durability for speed by default:
+
+- `PostgreSqlHarness` keeps the data directory (`PGDATA`) on tmpfs and runs with `fsync`, `full_page_writes` and
+  `synchronous_commit` off. Nothing is written to disk, which reduces IO load when many containers run in parallel.
+- `RedisHarness` and `RedisStackHarness` disable persistence (no RDB snapshots, no append-only file).
+
+Set `Durable = true` to get the image's durable behaviour instead, for example when a test restarts the server and
+expects the data to survive, or when the database is too large to keep in memory:
+
+```csharp
+var postgreSql = new PostgreSqlHarness { Durable = true };
+```
+
+`PostgreSqlHarness` mounts tmpfs at `/var/lib/postgresql/data`; if `ConfigureContainer` mounts a volume or bind mount
+there, Docker rejects the duplicate mount point, so set `Durable = true` in that case.
+
+`RedisHarness` appends `--save "" --appendonly no` to the container command after `ConfigureContainer` has run, so a
+custom command (`redis-server /usr/local/etc/redis/redis.conf` or extra `--option value` pairs) keeps working, but its
+`save` and `appendonly` settings are overridden unless `Durable = true`. `RedisStackHarness` sets the `REDIS_ARGS`
+environment variable instead; setting `REDIS_ARGS` yourself replaces the harness value.
+
+### Customizing the application under test
+
+Remove background work the test does not need, or host the application through your own `WebApplicationFactory`
+subclass (for example, one that overrides `CreateHost` or `ConfigureWebHost`):
+
+```csharp
+var component = ComponentBuilder.Create(new MyApplicationFactory())
+                                .RemoveHostedService<OutboxPublisher>()
+                                .AddHarness(httpClient)
+                                .Build();
+```
+
+`RemoveHostedService<TService>` runs after the application's own registrations, so it removes hosted services added
+in `Program` (and by `Configure` calls made before it). It matches the exact implementation type of non-keyed
+registrations; a factory registration is matched only when the factory is declared to return `TService`, as
+`AddHostedService(sp => new OutboxPublisher(...))` is. The component does not dispose a factory passed to `Create`.
 
 ### Custom harnesses
 

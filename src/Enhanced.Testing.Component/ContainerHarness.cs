@@ -8,7 +8,7 @@ namespace Enhanced.Testing.Component;
 /// <typeparam name="TContainer">
 ///     The type of the container.
 /// </typeparam>
-public abstract class ContainerHarness<TContainer> : Harness
+public abstract class ContainerHarness<TContainer> : Harness, IConcurrentStartDependency
     where TContainer : IContainer
 {
     private TContainer? _container;
@@ -35,6 +35,15 @@ public abstract class ContainerHarness<TContainer> : Harness
     ///     The name of the connection string to add to the configuration.
     /// </summary>
     public string? ConnectionName { get; init; }
+
+    /// <summary>
+    ///     Whether the component starts this harness concurrently with the other container harnesses, before the
+    ///     remaining dependencies. The default is <see langword="true" />. Set it to <see langword="false" /> when
+    ///     starting the container requires another harness, for example a container that connects to another
+    ///     container; the harness is then started sequentially, in registration order, after the concurrently started
+    ///     container harnesses.
+    /// </summary>
+    public bool StartConcurrently { get; init; } = true;
 
     /// <inheritdoc />
     public override void OnConfigure(IWebHostBuilder webHostBuilder)
