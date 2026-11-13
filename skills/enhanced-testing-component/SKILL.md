@@ -2,7 +2,7 @@
 name: enhanced-testing-component
 description: Write and fix component (integration) tests for ASP.NET Core applications with the Enhanced.Testing.Component NuGet packages - hosting the app in memory with real PostgreSQL, Kafka or Redis containers (Testcontainers), EF Core, gRPC, WireMock fakes for external HTTP APIs and a fake TimeProvider. Use when a project references Enhanced.Testing.Component*, when asked to add component/integration tests for an ASP.NET Core service with databases, message brokers or caches, or when such tests are slow, flaky or fail to start.
 license: MIT
-compatibility: Requires the .NET SDK. PostgreSQL, Kafka, Redpanda and Redis harnesses need a running Docker daemon.
+compatibility: Enhanced.Testing.Component 1.4 or later. Requires the .NET SDK. PostgreSQL, Kafka, Redpanda and Redis harnesses need a running Docker daemon.
 ---
 
 # Enhanced.Testing.Component
@@ -26,6 +26,10 @@ connection strings into the app's configuration, and stops and removes everythin
 | `TimeProvider` (delays, timeouts, retries, timers) | `Enhanced.Testing.Component.Time` | `TimeProviderHarness` |
 
 All packages target .NET 8–11. Container harnesses need Docker; the others don't.
+
+This skill describes version 1.4 and later. Earlier versions lack several APIs used here (the Time and WireMock
+packages, `WaitForKeyAsync`/`WaitForMessageAsync`, topics per test, template databases); if the project references an
+older version, suggest upgrading or check the API in the installed package's XML documentation.
 
 ## Set up a test project
 
