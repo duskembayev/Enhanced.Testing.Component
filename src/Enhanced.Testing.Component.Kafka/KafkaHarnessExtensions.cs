@@ -65,9 +65,8 @@ public static class KafkaHarnessExtensions
     ///     Creates a consumer of the topic, positioned at the end of the topic.
     /// </summary>
     /// <remarks>
-    ///     The consumer reads partition 0 only, so the topic must have a single partition. Topics created by
-    ///     <see cref="CreateUniqueTopicAsync" /> get the broker's default partition count, which is 1 unless the
-    ///     broker is configured otherwise.
+    ///     The consumer reads every partition of the topic. Messages from different partitions are not ordered
+    ///     relative to each other.
     /// </remarks>
     /// <param name="broker">
     ///     The broker harness.

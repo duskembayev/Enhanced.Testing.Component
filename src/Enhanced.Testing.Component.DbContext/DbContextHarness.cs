@@ -82,6 +82,44 @@ public class DbContextHarness<TContext> : Harness where TContext : Microsoft.Ent
     ///     Executes the specified action on the DbContext.
     /// </summary>
     /// <param name="action">
+    ///     The action to execute. It receives <paramref name="cancellationToken" />.
+    /// </param>
+    /// <param name="cancellationToken">
+    ///     The cancellation token.
+    /// </param>
+    public Task ExecuteAsync(Func<TContext, CancellationToken, Task> action,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(action);
+        return ExecuteAsync(context => action(context, cancellationToken), cancellationToken);
+    }
+
+    /// <summary>
+    ///     Executes the specified action on the DbContext.
+    /// </summary>
+    /// <param name="action">
+    ///     The action to execute. It receives <paramref name="cancellationToken" />.
+    /// </param>
+    /// <param name="cancellationToken">
+    ///     The cancellation token.
+    /// </param>
+    /// <typeparam name="T">
+    ///     The type of the result.
+    /// </typeparam>
+    /// <returns>
+    ///     The result of the action.
+    /// </returns>
+    public Task<T> ExecuteAsync<T>(Func<TContext, CancellationToken, Task<T>> action,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(action);
+        return ExecuteAsync(context => action(context, cancellationToken), cancellationToken);
+    }
+
+    /// <summary>
+    ///     Executes the specified action on the DbContext.
+    /// </summary>
+    /// <param name="action">
     ///     The action to execute.
     /// </param>
     public void Execute(Action<TContext> action)

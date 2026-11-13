@@ -1,3 +1,5 @@
+using Confluent.Kafka;
+using Confluent.Kafka.Admin;
 using Enhanced.Testing.Component;
 using Enhanced.Testing.Component.Kafka;
 using Microsoft.Extensions.Configuration;
@@ -202,6 +204,45 @@ public abstract class KafkaBrokerTests<TFixture>(TFixture fixture) : IClassFixtu
         Assert.Throws<ObjectDisposedException>(() => consumer.Consume(TimeSpan.Zero));
         await Assert.ThrowsAsync<ObjectDisposedException>(() => consumer.WaitForKeyAsync("key", MessageTimeout));
         await Assert.ThrowsAsync<ObjectDisposedException>(() => producer.ProduceAsync("key", "value"));
+    }
+
+    [Fact]
+    public async Task ShouldReturnDeliveryResult()
+    {
+        var key = Guid.NewGuid().ToString("N");
+
+        var result = await fixture.Producer.ProduceAsync(key, "value");
+
+        Assert.Equal(PersistenceStatus.Persisted, result.Status);
+        Assert.Equal(KafkaBrokerFixture.Topic, result.Topic);
+        Assert.Equal(key, result.Message.Key);
+    }
+
+    [Fact]
+    public async Task ShouldConsumeEveryPartition()
+    {
+        var topic = "partitions-" + Guid.NewGuid().ToString("N");
+        var bootstrapServers = fixture.Broker.GetConnectionString();
+
+        using (var admin = new AdminClientBuilder(new AdminClientConfig { BootstrapServers = bootstrapServers }).Build())
+        {
+            await admin.CreateTopicsAsync([new TopicSpecification { Name = topic, NumPartitions = 3 }]);
+        }
+
+        using var producer = new ProducerBuilder<string, string>(new ProducerConfig { BootstrapServers = bootstrapServers })
+            .Build();
+
+        await producer.ProduceAsync(new TopicPartition(topic, 1), new Message<string, string> { Key = "earlier", Value = "1" });
+
+        using var consumer = await fixture.Broker.CreateConsumerAsync<string, string>(topic);
+
+        await producer.ProduceAsync(new TopicPartition(topic, 2), new Message<string, string> { Key = "later", Value = "2" });
+
+        Assert.Equal("2", (await consumer.WaitForKeyAsync("later", MessageTimeout)).Value);
+
+        consumer.SeekToBeginning();
+
+        Assert.Equal("1", (await consumer.WaitForKeyAsync("earlier", MessageTimeout)).Value);
     }
 
     private async Task<string> RunIsolatedScenarioAsync(string value)

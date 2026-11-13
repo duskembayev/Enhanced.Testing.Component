@@ -1,10 +1,14 @@
 using System.Net.Http.Json;
 using DotNet.Testcontainers.Containers;
 using Enhanced.Testing.Component;
+using Enhanced.Testing.Component.DbContext;
 using Enhanced.Testing.Component.GrpcClient;
+using Enhanced.Testing.Component.PostgreSql;
 using Enhanced.Testing.Component.Redis;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
+using SampleService.Models;
 using SampleService.Services;
 
 namespace SampleService.Tests;
@@ -123,6 +127,71 @@ public class EnvironmentTests(SampleEnvironmentFixture fixture) : IClassFixture<
         await Assert.ThrowsAsync<NotSupportedException>(() => component.StartAsync());
 
         Assert.Equal(TestcontainersStates.Running, fixture.Redis.Container.State);
+    }
+
+    [Fact]
+    public async Task ShouldGiveEveryComponentItsOwnDatabaseFromTemplate()
+    {
+        var template = $"people_{Guid.NewGuid():N}";
+
+        await fixture.PostgreSql.CreateTemplateAsync(template, async connectionString =>
+        {
+            await using var dbContext = new PeopleDbContext(
+                new DbContextOptionsBuilder<PeopleDbContext>().UseNpgsql(connectionString).Options);
+
+            await dbContext.Database.EnsureCreatedAsync();
+            dbContext.Persons.Add(new Person { Name = "Alice" });
+            await dbContext.SaveChangesAsync();
+        });
+
+        var firstDatabase = CreateDatabaseHarness(template);
+        var firstDbContext = new DbContextHarness<PeopleDbContext>();
+        var firstClient = new HttpClientHarness();
+        var secondDatabase = CreateDatabaseHarness(template);
+        var secondClient = new HttpClientHarness();
+
+        await using (var first = await fixture.Environment
+                                              .CreateComponent<Program>()
+                                              .AddHarness(firstDatabase)
+                                              .AddHarness(firstDbContext)
+                                              .AddHarness(firstClient)
+                                              .StartAsync())
+        {
+            await firstDbContext.ExecuteAsync(async (dbContext, cancellationToken) =>
+            {
+                dbContext.Persons.Add(new Person { Name = "Bob" });
+                await dbContext.SaveChangesAsync(cancellationToken);
+            });
+
+            await using var second = await fixture.Environment
+                                                  .CreateComponent<Program>()
+                                                  .AddHarness(secondDatabase)
+                                                  .AddHarness(secondClient)
+                                                  .StartAsync();
+
+            Assert.Equal(["Alice"], await GetCachedPeopleAsync(firstClient));
+            Assert.Equal(["Alice"], await GetCachedPeopleAsync(secondClient));
+            Assert.Equal(2, await firstDbContext.ExecuteAsync((dbContext, cancellationToken) =>
+                dbContext.Persons.CountAsync(cancellationToken)));
+            Assert.True(await DatabaseExistsAsync(firstDatabase.Database));
+        }
+
+        Assert.False(await DatabaseExistsAsync(firstDatabase.Database));
+        Assert.False(await DatabaseExistsAsync(secondDatabase.Database));
+        Assert.False(firstDatabase.IsStarted);
+        Assert.True(fixture.PostgreSql.IsStarted);
+    }
+
+    private PostgreSqlDatabaseHarness CreateDatabaseHarness(string template) =>
+        new(fixture.PostgreSql) { ConnectionName = PeopleDbContext.ConnectionStringName, Template = template };
+
+    private async Task<bool> DatabaseExistsAsync(string database)
+    {
+        await using var connection = new NpgsqlConnection(fixture.PostgreSql.GetConnectionString());
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand("SELECT count(*) FROM pg_database WHERE datname = @name", connection);
+        command.Parameters.AddWithValue("name", database);
+        return (long)(await command.ExecuteScalarAsync())! > 0;
     }
 
     private static async Task<string[]> GetCachedPeopleAsync(HttpClientHarness httpClient) =>
