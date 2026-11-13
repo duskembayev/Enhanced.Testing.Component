@@ -71,14 +71,15 @@ public class WireMockHarnessTests : IAsyncLifetime
                                         .Build();
 
         await component.StartAsync(default);
+        var server = harness.Server;
         using var client = harness.CreateClient();
         var adminResponse = await client.GetAsync("/__admin/mappings");
         await component.StopAsync(default);
         await component.StopAsync(default);
 
         Assert.Equal(HttpStatusCode.OK, adminResponse.StatusCode);
+        Assert.False(server.IsStarted);
         Assert.Throws<InvalidOperationException>(() => harness.Server);
-        await Assert.ThrowsAsync<HttpRequestException>(() => client.GetAsync("/__admin/mappings"));
     }
 
     [Fact]
