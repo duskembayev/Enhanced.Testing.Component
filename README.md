@@ -18,6 +18,8 @@ The solution includes harnesses for the following components:
 - **Kafka**: Harnesses for a Kafka broker (Confluent, Apache Kafka native or Redpanda) for message-based integration
   testing.
   [![NuGet](https://img.shields.io/nuget/v/Enhanced.Testing.Component.Kafka)](https://www.nuget.org/packages/Enhanced.Testing.Component.Kafka)
+- **WireMock**: Hosts an in-process WireMock.Net server that fakes external HTTP services.
+  [![NuGet](https://img.shields.io/nuget/v/Enhanced.Testing.Component.WireMock)](https://www.nuget.org/packages/Enhanced.Testing.Component.WireMock)
 - **gRPC Client**: Simplifies the process of testing gRPC services by providing a client harness.
   [![NuGet](https://img.shields.io/nuget/v/Enhanced.Testing.Component.GrpcClient)](https://www.nuget.org/packages/Enhanced.Testing.Component.GrpcClient)
 - **HTTP Client**: Offers a harness for testing HTTP-based services and APIs.
@@ -97,6 +99,9 @@ without opening network ports.
 
 ### Test data and assertions
 
+- `WireMockHarness` (`Enhanced.Testing.Component.WireMock`) hosts an in-process WireMock.Net server instead of a real
+  external HTTP service and passes its URL to the application (`ConfigurationKey`). Stub and verify calls through
+  `Server`, and call `Reset` between tests.
 - `DbContextHarness<TContext>` creates the schema on start (`EnsureCreatedOnStart`) and runs queries against the
   application's database (`ExecuteAsync`).
 - `KafkaHarness` and `RedpandaHarness` create topics on start (`Topics`; existing topics are kept) and wait until they
@@ -124,7 +129,18 @@ without opening network ports.
   await producer.ProduceAsync("order-42", "created");
   var message = await consumer.WaitForKeyAsync("order-42", TimeSpan.FromSeconds(10));
   ```
-- `RedisDatabaseHarness` gives direct access to the Redis database (`Database`).
+- `RedisDatabaseHarness` gives direct access to the Redis database (`Database`). `DatabaseNumber` selects a database
+  index and `KeyPrefix` scopes its keys; `FlushAsync` deletes the harness's data (keys with `KeyPrefix` when set,
+  otherwise the whole database). To keep fixtures that share one Redis server apart, give each application its own
+  database: `DefaultDatabase` on `RedisHarness`/`RedisStackHarness` adds `defaultDatabase=N` to the connection string
+  passed to the application, and `RedisDatabaseHarness` follows it:
+
+  ```csharp
+  var redis = new RedisHarness { ConnectionName = "Redis", DefaultDatabase = 3 };
+  var redisDatabase = new RedisDatabaseHarness(redis);
+
+  await redisDatabase.FlushAsync();
+  ```
 - `TimeProviderHarness` (`Enhanced.Testing.Component.Time`) replaces the application's `TimeProvider` with a
   `FakeTimeProvider` (`TimeProvider`), so delays, timeouts and timers complete as soon as the test moves the clock
   (`Advance`, `SetUtcNow`) instead of waiting for real time. It affects only code that resolves `TimeProvider` from
@@ -135,6 +151,36 @@ without opening network ports.
   ```csharp
   var time = new TimeProviderHarness(new DateTimeOffset(2030, 1, 1, 0, 0, 0, TimeSpan.Zero));
   ```
+
+### Per-test PostgreSQL databases from a template
+
+To isolate tests that write to PostgreSQL without starting a container per test, prepare a template database once and
+copy it for each test. `CREATE DATABASE ... TEMPLATE` copies the database at the storage level, so a copy stays fast
+(about 60 ms, mostly `docker exec` overhead) even when building the schema and seed data takes much longer:
+
+```csharp
+await postgreSql.CreateTemplateAsync("people_template", async connectionString =>
+{
+    var options = new DbContextOptionsBuilder<PeopleDbContext>().UseNpgsql(connectionString).Options;
+    await using var context = new PeopleDbContext(options);
+    await context.Database.EnsureCreatedAsync();
+});
+
+var connectionString = await postgreSql.CreateDatabaseAsync($"people_{Guid.NewGuid():N}", "people_template");
+```
+
+- `CreateTemplateAsync` creates the database (dropping an existing one with that name), runs your callback with a
+  non-pooled connection string, then marks the database as a template, blocks new connections to it and closes the
+  open ones. PostgreSQL refuses to copy a template that has open connections.
+- `CreateDatabaseAsync` returns the new database's connection string. Without a template it creates an empty database.
+- `DropDatabaseAsync` drops a database (or a template) and closes its connections. `GetConnectionString(database)`
+  returns the connection string for any database in the container.
+
+The SQL runs through `psql` inside the container, so the package doesn't depend on Npgsql. Requires PostgreSQL 13 or
+later. Names are quoted, must be at most 63 bytes (PostgreSQL's identifier limit) and are case-sensitive.
+
+Databases live as long as the container, so drop per-test databases with `DropDatabaseAsync` when a test finishes if
+the container is shared by many tests. `CreateTemplateAsync` drops and re-creates a template with the same name.
 
 ### Configuring containers
 
@@ -150,6 +196,9 @@ var postgreSql = new PostgreSqlHarness
 };
 ```
 
+`ConfigureContainer` runs after the harness has applied its own settings, so it can override them (except the
+`RedisHarness` persistence arguments described below).
+
 Any Kafka-compatible broker works with the producer and consumer harnesses (they accept `IKafkaHarness`).
 `KafkaHarness` uses `apache/kafka-native` (a GraalVM build of Apache Kafka) by default: it starts fastest and has the
 smallest image. Use `KafkaHarness.ConfluentImage` for the Confluent Platform image, or `RedpandaHarness` for
@@ -161,6 +210,29 @@ var confluent = new KafkaHarness { Image = KafkaHarness.ConfluentImage, Topics =
 var redpanda = new RedpandaHarness { Topics = ["orders"], ConnectionName = "Kafka" };
 var consumer = new KafkaConsumerHarness<string, string>(redpanda) { Topic = "orders" };
 ```
+
+### Fast, non-durable databases
+
+Test data does not need to survive a crash, so container harnesses trade durability for speed by default:
+
+- `PostgreSqlHarness` keeps the data directory (`PGDATA`) on tmpfs and runs with `fsync`, `full_page_writes` and
+  `synchronous_commit` off. Nothing is written to disk, which reduces IO load when many containers run in parallel.
+- `RedisHarness` and `RedisStackHarness` disable persistence (no RDB snapshots, no append-only file).
+
+Set `Durable = true` to get the image's durable behaviour instead, for example when a test restarts the server and
+expects the data to survive, or when the database is too large to keep in memory:
+
+```csharp
+var postgreSql = new PostgreSqlHarness { Durable = true };
+```
+
+`PostgreSqlHarness` mounts tmpfs at `/var/lib/postgresql/data`; if `ConfigureContainer` mounts a volume or bind mount
+there, Docker rejects the duplicate mount point, so set `Durable = true` in that case.
+
+`RedisHarness` appends `--save "" --appendonly no` to the container command after `ConfigureContainer` has run, so a
+custom command (`redis-server /usr/local/etc/redis/redis.conf` or extra `--option value` pairs) keeps working, but its
+`save` and `appendonly` settings are overridden unless `Durable = true`. `RedisStackHarness` sets the `REDIS_ARGS`
+environment variable instead; setting `REDIS_ARGS` yourself replaces the harness value.
 
 ### Customizing the application under test
 
