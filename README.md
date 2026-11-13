@@ -111,6 +111,25 @@ Each package has its own README with examples, which is also shown on nuget.org:
 - [Fast component tests](https://github.com/duskembayev/Enhanced.Testing.Component/blob/main/docs/fast-tests.md): what makes component tests slow and how to speed them up.
 - [Writing a custom harness](https://github.com/duskembayev/Enhanced.Testing.Component/blob/main/docs/custom-harnesses.md): plugging in a dependency the library doesn't cover.
 
+## Using with AI coding agents
+
+The repository includes an [Agent Skill](https://github.com/duskembayev/Enhanced.Testing.Component/blob/main/skills/enhanced-testing-component/SKILL.md)
+that teaches coding agents how to write component tests with these packages: choosing packages, fixture templates,
+rules for fast and deterministic tests, and troubleshooting. It uses the open [Agent Skills](https://agentskills.io)
+format, supported by Claude Code, Codex, GitHub Copilot, Cursor, Gemini CLI and others. Install it with the
+[`skills`](https://github.com/vercel-labs/skills) CLI (requires Node.js), which asks which agents to install it for:
+
+```shell
+npx skills add duskembayev/Enhanced.Testing.Component
+```
+
+Add `-g` to install it for all your projects, or `-a <agent>` (for example `-a codex`) to skip the agent prompt. To
+install it by hand, copy the `skills/enhanced-testing-component` folder into your agent's skills folder, for example
+`.agents/skills/` or `.claude/skills/` in your repository.
+
+Agents without skill support can read [`llms.txt`](https://github.com/duskembayev/Enhanced.Testing.Component/blob/main/llms.txt),
+an index of the documentation. Every package also ships XML documentation, which the skill tells agents how to find.
+
 ## Requirements
 
 - .NET 8, 9, 10 or 11.
