@@ -25,6 +25,11 @@ public abstract class Harness : IHarness
     }
 
     /// <summary>
+    ///     Whether the harness is started by a component or an environment.
+    /// </summary>
+    public bool IsStarted => _owner is not null;
+
+    /// <summary>
     ///     Configures the web host builder.
     /// </summary>
     /// <param name="builder">

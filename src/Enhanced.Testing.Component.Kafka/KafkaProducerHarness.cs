@@ -76,9 +76,9 @@ public class KafkaProducerHarness<TKey, TValue> : Harness
     ///     The cancellation token.
     /// </param>
     /// <returns>
-    ///     A task that completes when the message is delivered.
+    ///     The delivery result.
     /// </returns>
-    public Task ProduceAsync(Message<TKey, TValue> message, CancellationToken cancellationToken = default)
+    public Task<DeliveryResult<TKey, TValue>> ProduceAsync(Message<TKey, TValue> message, CancellationToken cancellationToken = default)
     {
         ThrowIfComponentNotStarted();
         return _producer!.ProduceAsync(Topic, message, cancellationToken);

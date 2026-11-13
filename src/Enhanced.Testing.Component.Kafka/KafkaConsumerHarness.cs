@@ -3,7 +3,8 @@ using Confluent.Kafka;
 namespace Enhanced.Testing.Component.Kafka;
 
 /// <summary>
-///     A Kafka consumer harness.
+///     A Kafka consumer harness. It reads every partition of the topic, starting at the end of the topic when the
+///     component starts.
 /// </summary>
 /// <typeparam name="TKey">
 ///     The message key type.
@@ -55,15 +56,21 @@ public class KafkaConsumerHarness<TKey, TValue> : Harness
     public IDeserializer<TValue>? ValueDeserializer { get; set; }
 
     /// <summary>
-    ///     Seek to the specified offset.
+    ///     Moves the position of every partition of the topic to the specified offset.
     /// </summary>
     /// <param name="offset">
-    ///     The offset to seek to.
+    ///     The offset to seek to: <see cref="Offset.Beginning" />, <see cref="Offset.End" /> or an absolute offset,
+    ///     which is applied to every partition.
     /// </param>
     /// <param name="timeout">
-    ///     The timeout to wait for the operation. An infinite timeout is limited to 30 seconds.
+    ///     The timeout to query the partition offsets for <see cref="Offset.Beginning" /> and <see cref="Offset.End" />.
+    ///     When <see langword="null" /> or infinite, 30 seconds are used.
     /// </param>
-    public void Seek(Offset offset, TimeSpan timeout)
+    /// <exception cref="NotSupportedException">
+    ///     Thrown if <paramref name="offset" /> is a special offset other than <see cref="Offset.Beginning" /> and
+    ///     <see cref="Offset.End" />.
+    /// </exception>
+    public void Seek(Offset offset, TimeSpan? timeout = null)
     {
         ThrowIfComponentNotStarted();
         _reader!.Seek(offset, timeout);

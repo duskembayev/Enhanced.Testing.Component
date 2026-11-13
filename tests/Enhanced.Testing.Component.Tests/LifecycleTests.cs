@@ -274,6 +274,39 @@ public class LifecycleTests
     }
 
     [Fact]
+    public async Task ShouldStartEnvironmentContainerHarnessesConcurrently()
+    {
+        var firstEntered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var secondEntered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var first = new FakeContainerHarness(async ct =>
+        {
+            firstEntered.SetResult();
+            await secondEntered.Task.WaitAsync(TimeSpan.FromSeconds(30), ct);
+        });
+        var second = new FakeContainerHarness(async ct =>
+        {
+            secondEntered.SetResult();
+            await firstEntered.Task.WaitAsync(TimeSpan.FromSeconds(30), ct);
+        });
+        bool? containersStartedBeforeSequential = null;
+
+        var environment = await ComponentEnvironment.Create()
+                                                    .AddHarness(new DelegateEnvironmentHarness(onStart: () =>
+                                                        containersStartedBeforeSequential =
+                                                            first.Started && second.Started))
+                                                    .AddHarness(first)
+                                                    .AddHarness(second)
+                                                    .StartAsync();
+
+        await environment.DisposeAsync();
+
+        Assert.True(containersStartedBeforeSequential);
+        Assert.Equal(1, first.DisposeCount);
+        Assert.Equal(1, second.DisposeCount);
+        Assert.False(first.IsStarted);
+    }
+
+    [Fact]
     public async Task ShouldStopDependenciesInReverseRegistrationOrder()
     {
         var events = new List<string>();
