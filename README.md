@@ -82,9 +82,13 @@ PostgreSQL, Kafka and Redis run as real containers via [Testcontainers](https://
 
 ### Managed lifecycle
 
-`StartAsync` starts the harnesses in the order they were added, then the application. `StopAsync` stops the
-application first, then the harnesses in reverse order, and removes their containers. Add a harness after the
-harnesses it depends on (for example, `DbContextHarness` after `PostgreSqlHarness`).
+`StartAsync` starts all container harnesses (`ContainerHarness<TContainer>`) concurrently, so the startup time of
+several containers does not add up. It then starts the other harnesses in the order they were added, and finally the
+application. If anything fails to start, everything started so far is stopped again. `StopAsync` stops the application
+first, then the harnesses in reverse order, and removes their containers. Add a harness after the harnesses it depends
+on (for example, `DbContextHarness` after `PostgreSqlHarness`). A container harness that needs another harness while it
+starts (for example, a container connecting to another container) must be created with `StartConcurrently = false`;
+it is then started with the other harnesses in the order it was added.
 
 ### Clients for the application under test
 
@@ -107,6 +111,19 @@ without opening network ports.
 
   Non-matching messages are skipped; a `TimeoutException` reports how many. `SeekToBeginning`/`SeekToEnd` move the
   position the wait starts from.
+
+  To let tests share one broker and still run in parallel, give each test its own topic. `CreateUniqueTopicAsync`
+  creates a topic with a unique name and waits for its leader; `CreateConsumerAsync` and `CreateProducerAsync` return
+  disposable clients bound to it, with the same `WaitFor*` API:
+
+  ```csharp
+  var topic = await kafka.CreateUniqueTopicAsync("orders");
+  using var consumer = await kafka.CreateConsumerAsync<string, string>(topic);
+  using var producer = await kafka.CreateProducerAsync<string, string>(topic);
+
+  await producer.ProduceAsync("order-42", "created");
+  var message = await consumer.WaitForKeyAsync("order-42", TimeSpan.FromSeconds(10));
+  ```
 - `RedisDatabaseHarness` gives direct access to the Redis database (`Database`).
 - `TimeProviderHarness` (`Enhanced.Testing.Component.Time`) replaces the application's `TimeProvider` with a
   `FakeTimeProvider` (`TimeProvider`), so delays, timeouts and timers complete as soon as the test moves the clock
@@ -144,6 +161,23 @@ var confluent = new KafkaHarness { Image = KafkaHarness.ConfluentImage, Topics =
 var redpanda = new RedpandaHarness { Topics = ["orders"], ConnectionName = "Kafka" };
 var consumer = new KafkaConsumerHarness<string, string>(redpanda) { Topic = "orders" };
 ```
+
+### Customizing the application under test
+
+Remove background work the test does not need, or host the application through your own `WebApplicationFactory`
+subclass (for example, one that overrides `CreateHost` or `ConfigureWebHost`):
+
+```csharp
+var component = ComponentBuilder.Create(new MyApplicationFactory())
+                                .RemoveHostedService<OutboxPublisher>()
+                                .AddHarness(httpClient)
+                                .Build();
+```
+
+`RemoveHostedService<TService>` runs after the application's own registrations, so it removes hosted services added
+in `Program` (and by `Configure` calls made before it). It matches the exact implementation type of non-keyed
+registrations; a factory registration is matched only when the factory is declared to return `TService`, as
+`AddHostedService(sp => new OutboxPublisher(...))` is. The component does not dispose a factory passed to `Create`.
 
 ### Custom harnesses
 

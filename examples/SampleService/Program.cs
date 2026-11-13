@@ -9,6 +9,7 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddGrpc();
 builder.Services.AddHealthChecks();
 builder.Services.AddSingleton(TimeProvider.System);
+builder.Services.AddHostedService<HeartbeatService>();
 
 builder.Services.AddDbContext<PeopleDbContext>(options =>
 {
