@@ -23,6 +23,25 @@ public class RedisStackHarness : ContainerHarness<RedisContainer>
     public Func<RedisBuilder, RedisBuilder>? ConfigureContainer { get; init; }
 
     /// <summary>
+    ///     The database index the connection string selects (<c>defaultDatabase</c>). When null, database 0 is used.
+    /// </summary>
+    /// <remarks>
+    ///     Give each fixture its own index to isolate the application's keys while sharing one Redis server. Redis has
+    ///     16 databases (0-15) unless its <c>databases</c> setting is changed; commands to an index outside that range
+    ///     fail.
+    /// </remarks>
+    /// <exception cref="ArgumentOutOfRangeException">
+    ///     Thrown if the value is negative.
+    /// </exception>
+    public int? DefaultDatabase
+    {
+        get => _defaultDatabase;
+        init => _defaultDatabase = RedisConnectionString.ValidateDatabase(value, nameof(DefaultDatabase));
+    }
+
+    private readonly int? _defaultDatabase;
+
+    /// <summary>
     ///     Keeps the image's default persistence (RDB snapshots). By default (<see langword="false" />)
     ///     persistence is disabled: no RDB snapshots and no append-only file.
     /// </summary>
@@ -30,7 +49,8 @@ public class RedisStackHarness : ContainerHarness<RedisContainer>
 
     /// <inheritdoc />
     public override string GetConnectionString() =>
-        $"{Container.Hostname}:{Container.GetMappedPublicPort(RedisBuilder.RedisPort)}";
+        RedisConnectionString.Build(Container.Hostname, Container.GetMappedPublicPort(RedisBuilder.RedisPort),
+            DefaultDatabase);
 
     /// <inheritdoc />
     protected override RedisContainer OnCreateContainer()
