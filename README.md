@@ -151,9 +151,8 @@ var connectionString = await postgreSql.CreateDatabaseAsync($"people_{Guid.NewGu
 The SQL runs through `psql` inside the container, so the package doesn't depend on Npgsql. Requires PostgreSQL 13 or
 later. Names are quoted, must be at most 63 bytes (PostgreSQL's identifier limit) and are case-sensitive.
 
-Databases live as long as the container. With [`Reuse = true`](#reusing-containers-between-local-runs) they survive
-between runs, so drop per-test databases when a test finishes, and give each process its own template name if several
-test runs share one reused container (`CreateTemplateAsync` drops and re-creates a template with the same name).
+Databases live as long as the container, so drop per-test databases with `DropDatabaseAsync` when a test finishes if
+the container is shared by many tests. `CreateTemplateAsync` drops and re-creates a template with the same name.
 
 ### Configuring containers
 
