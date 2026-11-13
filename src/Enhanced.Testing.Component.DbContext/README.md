@@ -31,7 +31,11 @@ In a test, query or seed through the application's own `DbContext` (resolved fro
 provider in a new scope):
 
 ```csharp
-await peopleDb.ExecuteAsync(db => db.Persons.AddAsync(new Person { Name = "Kelly" }).AsTask());
+await peopleDb.ExecuteAsync(async db =>
+{
+    db.Persons.Add(new Person { Name = "Kelly" });
+    await db.SaveChangesAsync();
+});
 
 var exists = await peopleDb.ExecuteAsync(db => db.Persons.AnyAsync(p => p.Name == "Kelly"));
 ```
