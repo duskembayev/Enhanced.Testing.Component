@@ -1,7 +1,3 @@
-<p align="center">
-  <img src="https://raw.githubusercontent.com/duskembayev/Enhanced.Testing.Component/main/images/icon.png" alt="Enhanced.Testing.Component" width="96" />
-</p>
-
 <h1 align="center">Enhanced.Testing.Component</h1>
 
 <p align="center">
