@@ -70,30 +70,34 @@ for a fixture with PostgreSQL, Kafka, Redis and gRPC.
 
 | Package | What it gives you | NuGet |
 |---|---|---|
-| `Enhanced.Testing.Component` | The component, `HttpClientHarness`, base classes for custom harnesses | [![NuGet](https://img.shields.io/nuget/v/Enhanced.Testing.Component)](https://www.nuget.org/packages/Enhanced.Testing.Component) |
-| `Enhanced.Testing.Component.PostgreSql` | PostgreSQL container, per-test template databases | [![NuGet](https://img.shields.io/nuget/v/Enhanced.Testing.Component.PostgreSql)](https://www.nuget.org/packages/Enhanced.Testing.Component.PostgreSql) |
-| `Enhanced.Testing.Component.DbContext` | EF Core: create the schema on start, query the application's database | [![NuGet](https://img.shields.io/nuget/v/Enhanced.Testing.Component.DbContext)](https://www.nuget.org/packages/Enhanced.Testing.Component.DbContext) |
-| `Enhanced.Testing.Component.Kafka` | Kafka (native, Confluent) or Redpanda, producer and consumer harnesses, per-test topics | [![NuGet](https://img.shields.io/nuget/v/Enhanced.Testing.Component.Kafka)](https://www.nuget.org/packages/Enhanced.Testing.Component.Kafka) |
-| `Enhanced.Testing.Component.Redis` | Redis or Redis Stack, direct database access, per-test databases | [![NuGet](https://img.shields.io/nuget/v/Enhanced.Testing.Component.Redis)](https://www.nuget.org/packages/Enhanced.Testing.Component.Redis) |
-| `Enhanced.Testing.Component.GrpcClient` | gRPC clients that call the application in memory | [![NuGet](https://img.shields.io/nuget/v/Enhanced.Testing.Component.GrpcClient)](https://www.nuget.org/packages/Enhanced.Testing.Component.GrpcClient) |
-| `Enhanced.Testing.Component.WireMock` | In-process fakes for external HTTP APIs | [![NuGet](https://img.shields.io/nuget/v/Enhanced.Testing.Component.WireMock)](https://www.nuget.org/packages/Enhanced.Testing.Component.WireMock) |
-| `Enhanced.Testing.Component.Time` | A fake `TimeProvider` the test controls | [![NuGet](https://img.shields.io/nuget/v/Enhanced.Testing.Component.Time)](https://www.nuget.org/packages/Enhanced.Testing.Component.Time) |
+| [`Enhanced.Testing.Component`](https://github.com/duskembayev/Enhanced.Testing.Component/blob/main/src/Enhanced.Testing.Component/README.md) | The component, `HttpClientHarness`, base classes for custom harnesses | [![NuGet](https://img.shields.io/nuget/v/Enhanced.Testing.Component)](https://www.nuget.org/packages/Enhanced.Testing.Component) |
+| [`Enhanced.Testing.Component.PostgreSql`](https://github.com/duskembayev/Enhanced.Testing.Component/blob/main/src/Enhanced.Testing.Component.PostgreSql/README.md) | PostgreSQL container, per-test template databases | [![NuGet](https://img.shields.io/nuget/v/Enhanced.Testing.Component.PostgreSql)](https://www.nuget.org/packages/Enhanced.Testing.Component.PostgreSql) |
+| [`Enhanced.Testing.Component.DbContext`](https://github.com/duskembayev/Enhanced.Testing.Component/blob/main/src/Enhanced.Testing.Component.DbContext/README.md) | EF Core: create the schema on start, query the application's database | [![NuGet](https://img.shields.io/nuget/v/Enhanced.Testing.Component.DbContext)](https://www.nuget.org/packages/Enhanced.Testing.Component.DbContext) |
+| [`Enhanced.Testing.Component.Kafka`](https://github.com/duskembayev/Enhanced.Testing.Component/blob/main/src/Enhanced.Testing.Component.Kafka/README.md) | Kafka (native, Confluent) or Redpanda, producer and consumer harnesses, per-test topics | [![NuGet](https://img.shields.io/nuget/v/Enhanced.Testing.Component.Kafka)](https://www.nuget.org/packages/Enhanced.Testing.Component.Kafka) |
+| [`Enhanced.Testing.Component.Redis`](https://github.com/duskembayev/Enhanced.Testing.Component/blob/main/src/Enhanced.Testing.Component.Redis/README.md) | Redis or Redis Stack, direct database access, per-test databases | [![NuGet](https://img.shields.io/nuget/v/Enhanced.Testing.Component.Redis)](https://www.nuget.org/packages/Enhanced.Testing.Component.Redis) |
+| [`Enhanced.Testing.Component.GrpcClient`](https://github.com/duskembayev/Enhanced.Testing.Component/blob/main/src/Enhanced.Testing.Component.GrpcClient/README.md) | gRPC clients that call the application in memory | [![NuGet](https://img.shields.io/nuget/v/Enhanced.Testing.Component.GrpcClient)](https://www.nuget.org/packages/Enhanced.Testing.Component.GrpcClient) |
+| [`Enhanced.Testing.Component.WireMock`](https://github.com/duskembayev/Enhanced.Testing.Component/blob/main/src/Enhanced.Testing.Component.WireMock/README.md) | In-process fakes for external HTTP APIs | [![NuGet](https://img.shields.io/nuget/v/Enhanced.Testing.Component.WireMock)](https://www.nuget.org/packages/Enhanced.Testing.Component.WireMock) |
+| [`Enhanced.Testing.Component.Time`](https://github.com/duskembayev/Enhanced.Testing.Component/blob/main/src/Enhanced.Testing.Component.Time/README.md) | A fake `TimeProvider` the test controls | [![NuGet](https://img.shields.io/nuget/v/Enhanced.Testing.Component.Time)](https://www.nuget.org/packages/Enhanced.Testing.Component.Time) |
 
 ## Features
 
-- **[Lifecycle and customization](https://github.com/duskembayev/Enhanced.Testing.Component/blob/main/docs/lifecycle.md)**:
-  parallel container start, rollback on failure, removing hosted services, your own `WebApplicationFactory`, custom
-  harnesses.
-- **[Containers](https://github.com/duskembayev/Enhanced.Testing.Component/blob/main/docs/containers.md)**:
-  choose the image, customize the Testcontainers builder, fast non-durable defaults.
-- **[Kafka](https://github.com/duskembayev/Enhanced.Testing.Component/blob/main/docs/kafka.md)**:
-  native, Confluent or Redpanda brokers, waiting for a specific message, a topic per test.
-- **[PostgreSQL and EF Core](https://github.com/duskembayev/Enhanced.Testing.Component/blob/main/docs/postgresql.md)**:
-  schema on start, queries against the application's database, template databases.
-- **[Redis](https://github.com/duskembayev/Enhanced.Testing.Component/blob/main/docs/redis.md)**:
-  direct database access, a database per fixture, flushing test data.
-- **[HTTP and time fakes](https://github.com/duskembayev/Enhanced.Testing.Component/blob/main/docs/fakes.md)**:
-  WireMock for external APIs, `FakeTimeProvider` for timeouts, retries and timers.
+Each package has its own README with examples, which is also shown on nuget.org:
+
+- **[Lifecycle, customization, custom harnesses](https://github.com/duskembayev/Enhanced.Testing.Component/blob/main/src/Enhanced.Testing.Component/README.md)**: parallel container
+  start, rollback on failure, removing hosted services, your own `WebApplicationFactory`, image and builder options for
+  every container.
+- **[Kafka](https://github.com/duskembayev/Enhanced.Testing.Component/blob/main/src/Enhanced.Testing.Component.Kafka/README.md)**: native, Confluent or Redpanda brokers, waiting for a
+  specific message, a topic per test.
+- **[PostgreSQL](https://github.com/duskembayev/Enhanced.Testing.Component/blob/main/src/Enhanced.Testing.Component.PostgreSql/README.md)** and
+  **[EF Core](https://github.com/duskembayev/Enhanced.Testing.Component/blob/main/src/Enhanced.Testing.Component.DbContext/README.md)**: schema on start, queries against the
+  application's database, template databases, non-durable defaults.
+- **[Redis](https://github.com/duskembayev/Enhanced.Testing.Component/blob/main/src/Enhanced.Testing.Component.Redis/README.md)**: direct database access, a database per fixture,
+  flushing test data.
+- **[External HTTP APIs](https://github.com/duskembayev/Enhanced.Testing.Component/blob/main/src/Enhanced.Testing.Component.WireMock/README.md)** and
+  **[time](https://github.com/duskembayev/Enhanced.Testing.Component/blob/main/src/Enhanced.Testing.Component.Time/README.md)**: WireMock stubs and a fake `TimeProvider` for timeouts,
+  retries and timers.
+- **[gRPC](https://github.com/duskembayev/Enhanced.Testing.Component/blob/main/src/Enhanced.Testing.Component.GrpcClient/README.md)**: generated clients that call the application in
+  memory.
 
 ## Requirements
 
