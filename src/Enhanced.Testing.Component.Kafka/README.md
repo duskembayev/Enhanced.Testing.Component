@@ -38,6 +38,9 @@ var message = await fixture.Consumer.WaitForKeyAsync("order-42", TimeSpan.FromSe
 await fixture.Producer.ProduceAsync("order-43", "created");
 ```
 
+`ProduceAsync` waits until the broker acknowledges the message and returns the delivery result, with the partition
+and offset it was written to.
+
 ## Waiting for your message
 
 The consumer is positioned at the end of the topic on start. Prefer waiting for *your* message over reading the next
@@ -50,6 +53,10 @@ var result = await consumer.WaitForMessageAsync(r => r.Message.Value.Contains("4
 
 Non-matching messages are skipped; a `TimeoutException` reports how many. `SeekToBeginning`/`SeekToEnd` move the
 position the wait starts from.
+
+Consumers read every partition of the topic. Messages from different partitions arrive in no particular order
+relative to each other, which is another reason to wait for a specific message rather than the next one. `Seek` with
+an absolute offset moves every partition to that offset.
 
 ## A topic per test
 
@@ -65,9 +72,6 @@ using var producer = await kafka.CreateProducerAsync<string, string>(topic);
 await producer.ProduceAsync("order-42", "created");
 var message = await consumer.WaitForKeyAsync("order-42", TimeSpan.FromSeconds(10));
 ```
-
-All consumers, `KafkaConsumerHarness` included, read only partition 0, which is the only partition of a topic
-created with the bundled images' defaults. Messages in other partitions of a multi-partition topic are not seen.
 
 ## Choosing a broker
 

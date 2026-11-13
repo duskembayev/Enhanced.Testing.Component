@@ -63,6 +63,18 @@ var component = ComponentBuilder.Create<Program>()
                                 .Build();
 ```
 
+## Environments
+
+A `ComponentEnvironment` owns harnesses that outlive the components created from it, usually containers.
+`StartAsync` on the environment builder starts the container harnesses in parallel, then the others in order; if one
+fails, those already started are stopped again. Each component created with `CreateComponent` then goes through the
+steps above with its own harnesses only: the environment's harnesses are already running, and their configuration is
+applied to the component's host before the component's own.
+
+Stopping a component leaves the environment's harnesses running. Stopping (or disposing) the environment stops the
+components created from it that are still running, then the environment's harnesses in reverse order. As with a
+component, a failing step does not prevent the others, and calling `StopAsync` again retries what did not complete.
+
 ## Sharing a component between tests
 
 Starting containers and the application is the slowest part of a test run, so start one component for all the test
@@ -103,3 +115,6 @@ classes is a fixture starting.
 
 Tests that share a component also share the application's state and everything registered in it. See
 [Common pitfalls](pitfalls.md).
+
+When tests need a freshly started application, share an environment instead and create a component per test; only the
+application host is started again.
