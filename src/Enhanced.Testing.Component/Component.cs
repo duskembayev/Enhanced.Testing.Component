@@ -7,7 +7,7 @@ internal sealed class Component<TEntryPoint> : IComponent where TEntryPoint : cl
 {
     private readonly WebApplicationFactory<TEntryPoint> _appFactory;
     private readonly IReadOnlyList<IComponentDependency> _dependencies;
-    private readonly List<IComponentDependency> _startedDependencies = [];
+    private readonly bool[] _startedDependencies;
     private bool _appDisposed;
     private ComponentState _state;
 
@@ -15,6 +15,7 @@ internal sealed class Component<TEntryPoint> : IComponent where TEntryPoint : cl
     {
         _appFactory = appFactory;
         _dependencies = dependencies;
+        _startedDependencies = new bool[dependencies.Count];
     }
 
     public WebApplicationFactoryClientOptions ClientOptions => _appFactory.ClientOptions;
@@ -72,10 +73,17 @@ internal sealed class Component<TEntryPoint> : IComponent where TEntryPoint : cl
 
         try
         {
-            foreach (var dependency in _dependencies)
+            await StartContainersAsync(cancellationToken).ConfigureAwait(false);
+
+            for (var i = 0; i < _dependencies.Count; i++)
             {
-                _startedDependencies.Add(dependency);
-                await dependency.OnStartAsync(this, cancellationToken).ConfigureAwait(false);
+                if (_startedDependencies[i])
+                {
+                    continue;
+                }
+
+                _startedDependencies[i] = true;
+                await _dependencies[i].OnStartAsync(this, cancellationToken).ConfigureAwait(false);
             }
 
             cancellationToken.ThrowIfCancellationRequested();
@@ -136,8 +144,13 @@ internal sealed class Component<TEntryPoint> : IComponent where TEntryPoint : cl
             }
         }
 
-        for (var i = _startedDependencies.Count - 1; i >= 0 && !cancelled; i--)
+        for (var i = _dependencies.Count - 1; i >= 0 && !cancelled; i--)
         {
+            if (!_startedDependencies[i])
+            {
+                continue;
+            }
+
             if (cancellationToken.IsCancellationRequested)
             {
                 cancelled = true;
@@ -146,8 +159,8 @@ internal sealed class Component<TEntryPoint> : IComponent where TEntryPoint : cl
 
             try
             {
-                await _startedDependencies[i].OnStopAsync(this, cancellationToken).ConfigureAwait(false);
-                _startedDependencies.RemoveAt(i);
+                await _dependencies[i].OnStopAsync(this, cancellationToken).ConfigureAwait(false);
+                _startedDependencies[i] = false;
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
@@ -176,6 +189,61 @@ internal sealed class Component<TEntryPoint> : IComponent where TEntryPoint : cl
 
         _state = ComponentState.Stopped;
     }
+
+    private async Task StartContainersAsync(CancellationToken cancellationToken)
+    {
+        var starts = new List<Task>();
+        var scheduled = new HashSet<IComponentDependency>(ReferenceEqualityComparer.Instance);
+
+        for (var i = 0; i < _dependencies.Count; i++)
+        {
+            var dependency = _dependencies[i];
+
+            if (dependency is not IConcurrentStartDependency { StartConcurrently: true } || !scheduled.Add(dependency))
+            {
+                continue;
+            }
+
+            _startedDependencies[i] = true;
+            starts.Add(Task.Run(() => dependency.OnStartAsync(this, cancellationToken), CancellationToken.None));
+        }
+
+        List<Exception>? exceptions = null;
+
+        foreach (var start in starts)
+        {
+            try
+            {
+                await start.ConfigureAwait(false);
+            }
+            catch (Exception e)
+            {
+                (exceptions ??= []).Add(e);
+            }
+        }
+
+        if (exceptions is null)
+        {
+            return;
+        }
+
+        var failures = exceptions.Where(e => !IsCancellation(e, cancellationToken)).ToList();
+
+        if (failures.Count == 0)
+        {
+            ExceptionDispatchInfo.Throw(exceptions[0]);
+        }
+
+        if (failures.Count == 1)
+        {
+            ExceptionDispatchInfo.Throw(failures[0]);
+        }
+
+        throw new AggregateException("One or more container harnesses failed to start.", failures);
+    }
+
+    private static bool IsCancellation(Exception exception, CancellationToken cancellationToken) =>
+        exception is OperationCanceledException && cancellationToken.IsCancellationRequested;
 
     private void ThrowIfComponentNotStarted()
     {

@@ -69,7 +69,9 @@ public interface IComponent
     HttpClient CreateDefaultClient(Uri baseAddress, params DelegatingHandler[] handlers);
 
     /// <summary>
-    ///     Start the dependencies in order, then the application.
+    ///     Start the container harnesses concurrently (except those with
+    ///     <see cref="ContainerHarness{TContainer}.StartConcurrently" /> set to <see langword="false" />), wait for all
+    ///     of them, then start the other dependencies in registration order, then the application.
     ///     If starting fails, everything started so far is stopped before the exception is rethrown.
     ///     A component can be started only once.
     /// </summary>
@@ -80,8 +82,8 @@ public interface IComponent
 
     /// <summary>
     ///     Shut down the application while its dependencies are still running, then stop the dependencies in reverse
-    ///     order. A failing dependency does not prevent the others from stopping; the failures are rethrown afterwards
-    ///     and calling this method again retries only the steps that did not complete.
+    ///     registration order. A failing dependency does not prevent the others from stopping; the failures are
+    ///     rethrown afterwards and calling this method again retries only the steps that did not complete.
     /// </summary>
     /// <param name="cancellationToken">
     ///     The cancellation token. Cancellation is observed between steps: a step in progress is completed, the
