@@ -32,11 +32,16 @@ Assert.Equal("Hello John", reply.Message);
 
 The harness creates one channel per client type and shuts the channels down when the component stops.
 
-Generate the client from the same `.proto` file as the service, for example in the test project (code generation
-needs the `Grpc.Tools` and `Google.Protobuf` packages, or `Grpc.AspNetCore`, which includes both):
+The test project usually references the service project, so generate the client there, next to the server code,
+and use it from the tests:
 
 ```xml
 <ItemGroup>
-  <Protobuf Include="..\MyService\Protos\greet.proto" GrpcServices="Client" />
+  <Protobuf Include="Protos\greet.proto" GrpcServices="Both" />
 </ItemGroup>
 ```
+
+Don't generate the same `.proto` file again in the test project: the generated types would exist twice and the build
+reports `CS0436` conflicts. If the test project doesn't reference the service project, generate the client there
+instead (`GrpcServices="Client"`, with the `Grpc.Tools` and `Google.Protobuf` packages, or `Grpc.AspNetCore`, which
+includes both).
