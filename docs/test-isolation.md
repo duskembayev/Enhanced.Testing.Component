@@ -8,7 +8,7 @@ topic or key space inside a shared container.
 
 | Dependency | Unit of isolation | How |
 |---|---|---|
-| PostgreSQL | a database per test | Copy a prepared template database: `CreateTemplateAsync` once, `CreateDatabaseAsync` per test |
+| PostgreSQL | a database per test or component | Copy a prepared template database: `CreateTemplateAsync` once, then `CreateDatabaseAsync` per test or `PostgreSqlDatabaseHarness` per component |
 | Kafka | a topic per test | `CreateUniqueTopicAsync`, with `CreateConsumerAsync`/`CreateProducerAsync` bound to it |
 | Redis | a database or key prefix per fixture | `DefaultDatabase` for the application, `DatabaseNumber`/`KeyPrefix` and `FlushAsync` for the test |
 
@@ -27,10 +27,24 @@ package READMEs.
 ## The application's data
 
 Isolating the test's own data is easy; isolating what the **application** reads and writes is harder, because the
-application gets its configuration when it starts. Two approaches:
+application gets its configuration when it starts. Three approaches:
 
 - **One application per fixture.** Give each fixture's application its own database, topic names or Redis database
   through configuration (for example, `ConnectionName` plus `DefaultDatabase`, or `Configure(b => b.UseSetting(...))`).
+- **One application per test.** Share the containers in a `ComponentEnvironment` and create a component per test.
+  A `PostgreSqlDatabaseHarness` gives that component a database of its own, copied from a template, and passes its
+  connection string to the application:
+
+```csharp
+var orders = new PostgreSqlDatabaseHarness(fixture.PostgreSql) { ConnectionName = "Orders", Template = "orders_template" };
+
+await using var component = await fixture.Environment
+                                         .CreateComponent<Program>()
+                                         .AddHarness(orders)
+                                         .AddHarness(http)
+                                         .StartAsync();
+```
+
 - **Reset between tests.** Clean the data the application touched, for example `FlushAsync` for Redis or deleting
   rows through `DbContextHarness`.
 

@@ -26,9 +26,9 @@ public class OrdersFixture : IAsyncLifetime
 
     public HttpClientHarness Http { get; } = new();
 
-    public Task InitializeAsync() => _component.StartAsync(CancellationToken.None);
+    public Task InitializeAsync() => _component.StartAsync();
 
-    public Task DisposeAsync() => _component.StopAsync(CancellationToken.None);
+    public Task DisposeAsync() => _component.StopAsync();
 }
 
 public class OrdersTests(OrdersFixture fixture) : IClassFixture<OrdersFixture>
@@ -55,8 +55,61 @@ before .NET 10, add `<InternalsVisibleTo Include="MyApp.Tests" />` to the applic
 
 `StartAsync` starts all container harnesses in parallel, then the other harnesses in the order they were added, then
 the application; a failed start stops everything again. `StopAsync` stops the application first, then the harnesses
-in reverse order, and removes the containers. Add a harness after the harnesses it uses. See
+in reverse order, and removes the containers. Disposing a component (`await using`) stops it too. Add a harness after
+the harnesses it uses. See
 [Component lifecycle](https://github.com/duskembayev/Enhanced.Testing.Component/blob/main/docs/lifecycle.md) for details.
+
+## A fresh application per test
+
+Some applications do work at startup that a test needs to see, such as warming up a cache from the database or
+reading feature flags. To start a new application for each test without starting the containers again, put the
+containers in a `ComponentEnvironment` and create a component per test from it:
+
+```csharp
+public class OrdersEnvironment : IAsyncLifetime
+{
+    public PostgreSqlHarness PostgreSql { get; } = new() { ConnectionName = "Orders" };
+
+    public IComponentEnvironment Environment { get; private set; } = null!;
+
+    public async Task InitializeAsync() =>
+        Environment = await ComponentEnvironment.Create()
+                                                .AddHarness(PostgreSql)
+                                                .StartAsync();
+
+    public Task DisposeAsync() => Environment.StopAsync();
+}
+
+public class OrdersTests(OrdersEnvironment fixture) : IClassFixture<OrdersEnvironment>
+{
+    [Fact]
+    public async Task ShouldServeWarmedUpCatalog()
+    {
+        var http = new HttpClientHarness();
+
+        await using var component = await fixture.Environment
+                                                 .CreateComponent<Program>(builder =>
+                                                     builder.UseSetting("Catalog:Warmup", "true"))
+                                                 .AddHarness(http)
+                                                 .StartAsync();
+
+        var response = await http.CreateClient().GetAsync("/catalog");
+
+        response.EnsureSuccessStatusCode();
+    }
+}
+```
+
+- The environment starts its harnesses once (containers in parallel) and applies their configuration, such as
+  connection strings, and its own `Configure` calls to every component created from it.
+- `CreateComponent<TEntryPoint>()` returns a builder for a new component with its own application host. Add the
+  harnesses that work with this application instance to it: HTTP and gRPC clients, `DbContextHarness`, Kafka
+  producers and consumers, `RedisDatabaseHarness`, `PostgreSqlDatabaseHarness` for a database of its own. A builder
+  builds one component; `StartAsync()` on the builder builds and starts it.
+- Stopping or disposing a component stops its application and its own harnesses; the environment's containers keep
+  running. Stopping the environment stops the components still running, then its harnesses in reverse order.
+- A harness instance is used by one running component or environment at a time. It can be reused after its owner
+  stops. Container harnesses can belong to either; other harnesses belong to a component.
 
 ## Container harnesses
 

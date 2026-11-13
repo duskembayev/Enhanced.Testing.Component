@@ -92,7 +92,8 @@ var message = await consumer.WaitForKeyAsync("order-42", TimeSpan.FromSeconds(10
 ```
 
 Use `RedpandaHarness` instead of `KafkaHarness` if the app runs Redpanda in production, or
-`Image = KafkaHarness.ConfluentImage` for the Confluent image. The consumer harnesses read partition 0 only.
+`Image = KafkaHarness.ConfluentImage` for the Confluent image. From 2.0 consumers read every partition of the topic;
+before 2.0 they read partition 0 only.
 
 ## PostgreSQL: a database per test
 
@@ -115,6 +116,66 @@ var connectionString = await fixture.PostgreSql.CreateDatabaseAsync($"orders_{Gu
 ```
 
 The copy is for the test's own direct database access; the app keeps the database it was configured with at start.
+To give the app its own copy, start an app per test (next section).
+
+## A fresh application per test
+
+Requires 2.0 or later. Use when the app does work at startup that the test must control (cache warm-up, feature
+flags, seeded reference data), or when each test needs the app on a clean database. Containers start once; each test
+starts its own app host:
+
+```csharp
+public class OrdersEnvironment : IAsyncLifetime
+{
+    public PostgreSqlHarness PostgreSql { get; } = new() { ConnectionName = "Orders" };
+
+    public IComponentEnvironment Environment { get; private set; } = null!;
+
+    public async Task InitializeAsync()
+    {
+        Environment = await ComponentEnvironment.Create().AddHarness(PostgreSql).StartAsync();
+
+        await PostgreSql.CreateTemplateAsync("orders_template", async connectionString =>
+        {
+            var options = new DbContextOptionsBuilder<OrdersDbContext>().UseNpgsql(connectionString).Options;
+            await using var context = new OrdersDbContext(options);
+            await context.Database.EnsureCreatedAsync();
+        });
+    }
+
+    public Task DisposeAsync() => Environment.StopAsync();
+}
+
+public class OrdersTests(OrdersEnvironment fixture) : IClassFixture<OrdersEnvironment>
+{
+    [Fact]
+    public async Task ShouldStoreOrder()
+    {
+        var orders = new PostgreSqlDatabaseHarness(fixture.PostgreSql)
+        {
+            ConnectionName = "Orders", Template = "orders_template"
+        };
+        var ordersDb = new DbContextHarness<OrdersDbContext>();
+        var http = new HttpClientHarness();
+
+        await using var component = await fixture.Environment
+                                                 .CreateComponent<Program>()
+                                                 .AddHarness(orders)
+                                                 .AddHarness(ordersDb)
+                                                 .AddHarness(http)
+                                                 .StartAsync();
+
+        var response = await http.CreateClient().PostAsJsonAsync("/orders", new { Item = "book" });
+
+        response.EnsureSuccessStatusCode();
+        Assert.Equal(1, await ordersDb.ExecuteAsync((db, ct) => db.Orders.CountAsync(ct)));
+    }
+}
+```
+
+Containers (PostgreSQL, Kafka, Redis) go to the environment; everything that talks to one app instance (HTTP, gRPC,
+`DbContextHarness`, Kafka producer/consumer, `RedisDatabaseHarness`, `PostgreSqlDatabaseHarness`) goes to the
+component. `CreateComponent<Program>(b => b.UseSetting(...))` configures one app instance.
 
 ## Redis
 
