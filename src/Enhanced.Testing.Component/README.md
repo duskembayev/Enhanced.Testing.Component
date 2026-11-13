@@ -48,15 +48,10 @@ without opening network ports.
 
 ## Lifecycle
 
-`StartAsync` starts all container harnesses (`ContainerHarness<TContainer>`) concurrently, so the startup time of
-several containers does not add up. It then starts the other harnesses in the order they were added, and finally the
-application. If anything fails to start, everything started so far is stopped again. `StopAsync` stops the application
-first, then the harnesses in reverse order, and removes their containers.
-
-Add a harness after the harnesses it depends on (for example, `DbContextHarness` after `PostgreSqlHarness`). A
-container harness that needs another harness while it starts (for example, a container connecting to another
-container) must be created with `StartConcurrently = false`; it is then started with the other harnesses in the order
-it was added.
+`StartAsync` starts all container harnesses in parallel, then the other harnesses in the order they were added, then
+the application; a failed start stops everything again. `StopAsync` stops the application first, then the harnesses
+in reverse order, and removes the containers. Add a harness after the harnesses it uses. See
+[Component lifecycle](https://github.com/duskembayev/Enhanced.Testing.Component/blob/main/docs/lifecycle.md) for details.
 
 ## Container harnesses
 
@@ -101,18 +96,8 @@ registrations; a factory registration is matched only when the factory is declar
 
 ## Custom harnesses
 
-Derive from `Harness` (override `OnConfigure`, `OnStart`, `OnStop`) to plug in any dependency, or from
-`ContainerHarness<TContainer>` (override `OnCreateContainer`, `GetConnectionString`) for any Testcontainers module:
-
-```csharp
-public class MongoHarness : ContainerHarness<MongoDbContainer>
-{
-    public override string GetConnectionString() => Container.GetConnectionString();
-
-    protected override MongoDbContainer OnCreateContainer() =>
-        new MongoDbBuilder("mongo:8.0").Build();
-}
-```
+Derive from `Harness` to plug in any dependency, or from `ContainerHarness<TContainer>` for any Testcontainers
+module. See [Writing a custom harness](https://github.com/duskembayev/Enhanced.Testing.Component/blob/main/docs/custom-harnesses.md).
 
 ## Related packages
 

@@ -99,6 +99,13 @@ Each package has its own README with examples, which is also shown on nuget.org:
 - **[gRPC](https://github.com/duskembayev/Enhanced.Testing.Component/blob/main/src/Enhanced.Testing.Component.GrpcClient/README.md)**: generated clients that call the application in
   memory.
 
+## Guides
+
+- [Component lifecycle](https://github.com/duskembayev/Enhanced.Testing.Component/blob/main/docs/lifecycle.md): what happens on start and stop, and how to order harnesses.
+- [Test isolation](https://github.com/duskembayev/Enhanced.Testing.Component/blob/main/docs/test-isolation.md): sharing containers between tests while keeping their data apart.
+- [Fast component tests](https://github.com/duskembayev/Enhanced.Testing.Component/blob/main/docs/fast-tests.md): what makes component tests slow and how to speed them up.
+- [Writing a custom harness](https://github.com/duskembayev/Enhanced.Testing.Component/blob/main/docs/custom-harnesses.md): plugging in a dependency the library doesn't cover.
+
 ## Requirements
 
 - .NET 8, 9, 10 or 11.
