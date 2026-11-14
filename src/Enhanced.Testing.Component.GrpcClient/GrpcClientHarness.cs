@@ -24,7 +24,19 @@ public class GrpcClientHarness : Harness
         where TClient : ClientBase
     {
         ThrowIfComponentNotStarted();
-        var channel = _channels.GetOrAdd(typeof(TClient), _ => new Lazy<GrpcChannel>(CreateGrpcChannel)).Value;
+        var lazyChannel = _channels.GetOrAdd(typeof(TClient), _ => new Lazy<GrpcChannel>(CreateGrpcChannel));
+        GrpcChannel channel;
+
+        try
+        {
+            channel = lazyChannel.Value;
+        }
+        catch
+        {
+            _channels.TryRemove(new KeyValuePair<Type, Lazy<GrpcChannel>>(typeof(TClient), lazyChannel));
+            throw;
+        }
+
         return (TClient)Activator.CreateInstance(typeof(TClient), channel)!;
     }
 

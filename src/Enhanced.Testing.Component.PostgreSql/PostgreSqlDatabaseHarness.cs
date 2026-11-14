@@ -10,7 +10,8 @@ namespace Enhanced.Testing.Component.PostgreSql;
 /// </summary>
 /// <remarks>
 ///     The database is dropped when the component stops, also when its creation was interrupted, so a cancelled start
-///     does not leave it behind.
+///     does not leave it behind. A database that already existed when the harness started is not dropped: the start
+///     fails and the database is left as it was.
 /// </remarks>
 /// <param name="postgreSql">
 ///     The PostgreSQL harness that runs the container. It must be started before this harness: share it through an
@@ -82,7 +83,16 @@ public class PostgreSqlDatabaseHarness(PostgreSqlHarness postgreSql) : Harness
     {
         _database = Database ?? $"test_{Guid.NewGuid():N}";
         _created = true;
-        await postgreSql.CreateDatabaseAsync(_database, Template, cancellationToken).ConfigureAwait(false);
+
+        try
+        {
+            await postgreSql.CreateDatabaseAsync(_database, Template, cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception exception) when (exception is ArgumentException or InvalidOperationException)
+        {
+            _created = false;
+            throw;
+        }
     }
 
     /// <inheritdoc />

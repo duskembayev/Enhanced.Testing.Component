@@ -26,8 +26,9 @@ public interface IComponentEnvironment : IAsyncDisposable
         where TEntryPoint : class;
 
     /// <summary>
-    ///     Stops the running components created from the environment, then stops the environment harnesses in reverse
-    ///     order. A failing step does not prevent the others; calling this method again retries the failed steps.
+    ///     Waits for the components created from the environment that are still starting, stops the running ones, then
+    ///     stops the environment harnesses in reverse order. A failing step does not prevent the others; calling this
+    ///     method again retries the failed steps.
     /// </summary>
     /// <param name="cancellationToken">
     ///     The cancellation token. Cancellation is observed between steps.

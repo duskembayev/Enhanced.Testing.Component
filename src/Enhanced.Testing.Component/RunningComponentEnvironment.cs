@@ -79,7 +79,7 @@ internal sealed class RunningComponentEnvironment : IComponentEnvironment
                 components,
                 async component =>
                 {
-                    await component.WaitForStartAsync().ConfigureAwait(false);
+                    await component.WaitForStartAsync().WaitAsync(cancellationToken).ConfigureAwait(false);
                     await component.StopAsync(cancellationToken).ConfigureAwait(false);
                 },
                 exceptions,
