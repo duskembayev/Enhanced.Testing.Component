@@ -89,13 +89,13 @@ for a fixture with PostgreSQL, Kafka, Redis and gRPC.
 Each package has its own README with examples, which is also shown on nuget.org:
 
 - **[Lifecycle, customization, custom harnesses](https://github.com/duskembayev/Enhanced.Testing.Component/blob/main/src/Enhanced.Testing.Component/README.md)**: parallel container
-  start, rollback on failure, removing hosted services, your own `WebApplicationFactory`, image and builder options for
-  every container.
+  start, rollback on failure, a fresh application per test on shared containers, removing hosted services, your own
+  `WebApplicationFactory`, image and builder options for every container.
 - **[Kafka](https://github.com/duskembayev/Enhanced.Testing.Component/blob/main/src/Enhanced.Testing.Component.Kafka/README.md)**: native, Confluent or Redpanda brokers, waiting for a
   specific message, a topic per test.
 - **[PostgreSQL](https://github.com/duskembayev/Enhanced.Testing.Component/blob/main/src/Enhanced.Testing.Component.PostgreSql/README.md)** and
   **[EF Core](https://github.com/duskembayev/Enhanced.Testing.Component/blob/main/src/Enhanced.Testing.Component.DbContext/README.md)**: schema on start, queries against the
-  application's database, template databases, non-durable defaults.
+  application's database, template databases, a database per component, non-durable defaults.
 - **[Redis](https://github.com/duskembayev/Enhanced.Testing.Component/blob/main/src/Enhanced.Testing.Component.Redis/README.md)**: direct database access, a database per fixture,
   flushing test data.
 - **[External HTTP APIs](https://github.com/duskembayev/Enhanced.Testing.Component/blob/main/src/Enhanced.Testing.Component.WireMock/README.md)** and
@@ -110,6 +110,7 @@ Each package has its own README with examples, which is also shown on nuget.org:
 - [Test isolation](https://github.com/duskembayev/Enhanced.Testing.Component/blob/main/docs/test-isolation.md): sharing containers between tests while keeping their data apart.
 - [Fast component tests](https://github.com/duskembayev/Enhanced.Testing.Component/blob/main/docs/fast-tests.md): what makes component tests slow and how to speed them up.
 - [Writing a custom harness](https://github.com/duskembayev/Enhanced.Testing.Component/blob/main/docs/custom-harnesses.md): plugging in a dependency the library doesn't cover.
+- [Upgrading to 2.0](https://github.com/duskembayev/Enhanced.Testing.Component/blob/main/docs/upgrading-to-2.0.md): new features and breaking changes.
 
 ## Using with AI coding agents
 

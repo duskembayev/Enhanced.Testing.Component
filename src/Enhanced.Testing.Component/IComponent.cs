@@ -3,9 +3,9 @@ using Microsoft.AspNetCore.TestHost;
 namespace Enhanced.Testing.Component;
 
 /// <summary>
-///     Represents a component.
+///     Represents a component. Disposing the component stops it.
 /// </summary>
-public interface IComponent
+public interface IComponent : IAsyncDisposable
 {
     /// <summary>
     ///     The test server.
@@ -78,16 +78,17 @@ public interface IComponent
     /// <param name="cancellationToken">
     ///     The cancellation token.
     /// </param>
-    Task StartAsync(CancellationToken cancellationToken);
+    Task StartAsync(CancellationToken cancellationToken = default);
 
     /// <summary>
     ///     Shut down the application while its dependencies are still running, then stop the dependencies in reverse
     ///     registration order. A failing dependency does not prevent the others from stopping; the failures are
     ///     rethrown afterwards and calling this method again retries only the steps that did not complete.
+    ///     Harnesses of the environment the component was created from are not stopped.
     /// </summary>
     /// <param name="cancellationToken">
     ///     The cancellation token. Cancellation is observed between steps: a step in progress is completed, the
     ///     remaining steps are skipped and <see cref="OperationCanceledException" /> is thrown.
     /// </param>
-    Task StopAsync(CancellationToken cancellationToken);
+    Task StopAsync(CancellationToken cancellationToken = default);
 }

@@ -274,6 +274,39 @@ public class LifecycleTests
     }
 
     [Fact]
+    public async Task ShouldStartEnvironmentContainerHarnessesConcurrently()
+    {
+        var firstEntered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var secondEntered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var first = new FakeContainerHarness(async ct =>
+        {
+            firstEntered.SetResult();
+            await secondEntered.Task.WaitAsync(TimeSpan.FromSeconds(30), ct);
+        });
+        var second = new FakeContainerHarness(async ct =>
+        {
+            secondEntered.SetResult();
+            await firstEntered.Task.WaitAsync(TimeSpan.FromSeconds(30), ct);
+        });
+        bool? containersStartedBeforeSequential = null;
+
+        var environment = await ComponentEnvironment.Create()
+                                                    .AddHarness(new DelegateEnvironmentHarness(onStart: () =>
+                                                        containersStartedBeforeSequential =
+                                                            first.Started && second.Started))
+                                                    .AddHarness(first)
+                                                    .AddHarness(second)
+                                                    .StartAsync();
+
+        await environment.DisposeAsync();
+
+        Assert.True(containersStartedBeforeSequential);
+        Assert.Equal(1, first.DisposeCount);
+        Assert.Equal(1, second.DisposeCount);
+        Assert.False(first.IsStarted);
+    }
+
+    [Fact]
     public async Task ShouldStopDependenciesInReverseRegistrationOrder()
     {
         var events = new List<string>();
@@ -511,6 +544,101 @@ public class LifecycleTests
         Assert.Throws<InvalidOperationException>(() => redis.Container);
     }
 
+    [Fact]
+    public async Task ShouldStopComponentsAndRemoveContainersWhenEnvironmentIsDisposed()
+    {
+        var redis = new RedisHarness();
+        var httpClient = new HttpClientHarness();
+        var environment = await ComponentEnvironment.Create().AddHarness(redis).StartAsync();
+
+        string containerId;
+        IComponent component;
+
+        try
+        {
+            containerId = redis.Container.Id;
+            component = await environment.CreateComponent<Program>().AddHarness(httpClient).StartAsync();
+            Assert.Equal(TestcontainersStates.Running, redis.Container.State);
+        }
+        finally
+        {
+            await environment.DisposeAsync();
+        }
+
+        Assert.False(await ContainerExistsAsync(containerId));
+        Assert.Throws<InvalidOperationException>(() => component.Services);
+        Assert.Throws<InvalidOperationException>(() => httpClient.CreateClient());
+        Assert.Throws<InvalidOperationException>(() => redis.Container);
+        Assert.Throws<InvalidOperationException>(() => environment.CreateComponent<Program>());
+
+        await environment.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task ShouldRemoveContainersWhenEnvironmentHarnessFailsToStop()
+    {
+        var first = new RedisHarness();
+        var second = new RedisHarness();
+        var failure = new InvalidOperationException("Stop failed.");
+        var environment = await ComponentEnvironment.Create()
+                                                    .AddHarness(first)
+                                                    .AddHarness(new DelegateEnvironmentHarness(onStop: () => throw failure))
+                                                    .AddHarness(second)
+                                                    .StartAsync();
+
+        string[] containerIds = [first.Container.Id, second.Container.Id];
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => environment.StopAsync());
+        Assert.Same(failure, exception);
+
+        foreach (var id in containerIds)
+        {
+            Assert.False(await ContainerExistsAsync(id));
+        }
+    }
+
+    [Fact]
+    public async Task ShouldRemoveContainersWhenEnvironmentStartFails()
+    {
+        var redis = new RedisHarness();
+        string? containerId = null;
+        var builder = ComponentEnvironment.Create()
+                                          .AddHarness(redis)
+                                          .AddHarness(new DelegateEnvironmentHarness(onStart: () =>
+                                          {
+                                              containerId = redis.Container.Id;
+                                              throw new InvalidOperationException("Start failed.");
+                                          }));
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => builder.StartAsync());
+
+        Assert.NotNull(containerId);
+        Assert.False(await ContainerExistsAsync(containerId));
+    }
+
+    [Fact]
+    public async Task ShouldSurfaceCancelledEnvironmentStopAndKeepCleanupRetryable()
+    {
+        var redis = new RedisHarness();
+        var environment = await ComponentEnvironment.Create().AddHarness(redis).StartAsync();
+        var containerId = redis.Container.Id;
+
+        try
+        {
+            using var cts = new CancellationTokenSource();
+            await cts.CancelAsync();
+
+            await Assert.ThrowsAsync<OperationCanceledException>(() => environment.StopAsync(cts.Token));
+            Assert.True(await ContainerExistsAsync(containerId));
+        }
+        finally
+        {
+            await environment.DisposeAsync();
+        }
+
+        Assert.False(await ContainerExistsAsync(containerId));
+    }
+
     private static Task<bool> ContainerExistsAsync(string id) => ContainerMatchesAsync("id", id);
 
     private static Task<bool> ContainerWithLabelExistsAsync(string label) =>
@@ -549,6 +677,26 @@ public class LifecycleTests
         {
             onStop?.Invoke();
             onStopComponent?.Invoke(component);
+            return Task.CompletedTask;
+        }
+    }
+
+    private sealed class DelegateEnvironmentHarness(Action? onStart = null, Action? onStop = null)
+        : IEnvironmentHarness
+    {
+        public void OnConfigure(IWebHostBuilder builder)
+        {
+        }
+
+        public Task OnStartAsync(IComponentEnvironment environment, CancellationToken cancellationToken)
+        {
+            onStart?.Invoke();
+            return Task.CompletedTask;
+        }
+
+        public Task OnStopAsync(IComponentEnvironment environment, CancellationToken cancellationToken)
+        {
+            onStop?.Invoke();
             return Task.CompletedTask;
         }
     }

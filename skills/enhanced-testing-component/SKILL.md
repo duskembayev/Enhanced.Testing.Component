@@ -2,7 +2,7 @@
 name: enhanced-testing-component
 description: Write and fix component (integration) tests for ASP.NET Core applications with the Enhanced.Testing.Component NuGet packages - hosting the app in memory with real PostgreSQL, Kafka or Redis containers (Testcontainers), EF Core, gRPC, WireMock fakes for external HTTP APIs and a fake TimeProvider. Use when a project references Enhanced.Testing.Component*, when asked to add component/integration tests for an ASP.NET Core service with databases, message brokers or caches, or when such tests are slow, flaky or fail to start.
 license: MIT
-compatibility: Enhanced.Testing.Component 1.4 or later. Requires the .NET SDK. PostgreSQL, Kafka, Redpanda and Redis harnesses need a running Docker daemon.
+compatibility: Enhanced.Testing.Component 1.4 or later; environments, per-component databases and multi-partition Kafka consumers need 2.0 or later. Requires the .NET SDK. PostgreSQL, Kafka, Redpanda and Redis harnesses need a running Docker daemon.
 ---
 
 # Enhanced.Testing.Component
@@ -18,7 +18,7 @@ connection strings into the app's configuration, and stops and removes everythin
 |---|---|---|
 | HTTP endpoints | `Enhanced.Testing.Component` | `HttpClientHarness` |
 | gRPC services | `Enhanced.Testing.Component.GrpcClient` | `GrpcClientHarness` |
-| PostgreSQL | `Enhanced.Testing.Component.PostgreSql` | `PostgreSqlHarness` |
+| PostgreSQL | `Enhanced.Testing.Component.PostgreSql` | `PostgreSqlHarness`, `PostgreSqlDatabaseHarness` |
 | EF Core (any provider) | `Enhanced.Testing.Component.DbContext` | `DbContextHarness<TContext>` |
 | Kafka or Redpanda | `Enhanced.Testing.Component.Kafka` | `KafkaHarness`, `RedpandaHarness`, `KafkaProducerHarness<K,V>`, `KafkaConsumerHarness<K,V>` |
 | Redis or Redis Stack | `Enhanced.Testing.Component.Redis` | `RedisHarness`, `RedisStackHarness`, `RedisDatabaseHarness` |
@@ -30,6 +30,11 @@ All packages target .NET 8–11. Container harnesses need Docker; the others don
 This skill describes version 1.4 and later. Earlier versions lack several APIs used here (the Time and WireMock
 packages, `WaitForKeyAsync`/`WaitForMessageAsync`, topics per test, template databases); if the project references an
 older version, suggest upgrading or check the API in the installed package's XML documentation.
+
+Version 2.0 breaks compatibility with 1.x: it adds `ComponentEnvironment` and `PostgreSqlDatabaseHarness`, Kafka
+consumers read every partition instead of partition 0, `KafkaProducerHarness.ProduceAsync` returns the delivery
+result, `IComponent` is `IAsyncDisposable`, and a component builder builds only one component. The parts of this
+skill that need 2.0 say so.
 
 ## Set up a test project
 
@@ -98,6 +103,10 @@ More templates (Kafka, Redis, WireMock, time, gRPC): [references/templates.md](r
   database copied from a template (`CreateTemplateAsync` once, `CreateDatabaseAsync` per test), a Kafka topic per test
   (`CreateUniqueTopicAsync`), a Redis database or key prefix per fixture (`DefaultDatabase`, `KeyPrefix`,
   `FlushAsync`).
+- **Need a freshly started app per test?** (startup work such as cache warm-up or reading flags, 2.0 or later.) Share
+  the containers in a `ComponentEnvironment` fixture and create a component per test with
+  `Environment.CreateComponent<Program>()`; give it a database of its own with `PostgreSqlDatabaseHarness`. See
+  [references/templates.md](references/templates.md#a-fresh-application-per-test).
 - **Wait for your own result, never sleep.** For Kafka use `WaitForKeyAsync`/`WaitForMessageAsync` with a generous
   timeout (10 s); they skip unrelated messages and return as soon as the match arrives. Never use `Task.Delay` or read
   "the next" message.
@@ -130,9 +139,10 @@ uses. Read it instead of decompiling or reflecting over the assemblies:
   management); `obj/project.assets.json` lists the resolved version under `libraries` as `"<package id>/<version>"`.
   Take the `tfm` folder closest to the test project's target framework (`net8.0`, `net9.0`, `net10.0`, `net11.0`).
 - Members are keyed by documentation IDs: `T:` types, `M:` methods, `P:` properties, for example
-  `T:Enhanced.Testing.Component.Kafka.KafkaHarness` or
-  ``M:Enhanced.Testing.Component.Kafka.KafkaConsumerHarness`2.Seek(Confluent.Kafka.Offset,System.TimeSpan)``
-  (`` `2 `` marks a generic type with two type parameters). Search the file for the type name to see all its members:
+  `T:Enhanced.Testing.Component.Kafka.KafkaHarness`,
+  ``T:Enhanced.Testing.Component.Kafka.KafkaConsumerHarness`2`` (`` `2 `` marks a generic type with two type
+  parameters) and
+  `M:Enhanced.Testing.Component.PostgreSql.PostgreSqlHarness.DropDatabaseAsync(System.String,System.Threading.CancellationToken)`. Search the file for the type name to see all its members:
 
 ```shell
 grep -A6 'Enhanced.Testing.Component.Kafka.KafkaHarnessExtensions' \

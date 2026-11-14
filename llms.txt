@@ -12,8 +12,8 @@ Each package ships XML documentation next to its assembly (`<NuGet packages fold
 
 ## Packages
 
-- [Enhanced.Testing.Component](https://raw.githubusercontent.com/duskembayev/Enhanced.Testing.Component/main/src/Enhanced.Testing.Component/README.md): the component, HttpClientHarness, container options, customization
-- [Enhanced.Testing.Component.PostgreSql](https://raw.githubusercontent.com/duskembayev/Enhanced.Testing.Component/main/src/Enhanced.Testing.Component.PostgreSql/README.md): PostgreSQL container, template databases
+- [Enhanced.Testing.Component](https://raw.githubusercontent.com/duskembayev/Enhanced.Testing.Component/main/src/Enhanced.Testing.Component/README.md): the component, environments (an app per test on shared containers), HttpClientHarness, container options, customization
+- [Enhanced.Testing.Component.PostgreSql](https://raw.githubusercontent.com/duskembayev/Enhanced.Testing.Component/main/src/Enhanced.Testing.Component.PostgreSql/README.md): PostgreSQL container, template databases, a database per component
 - [Enhanced.Testing.Component.DbContext](https://raw.githubusercontent.com/duskembayev/Enhanced.Testing.Component/main/src/Enhanced.Testing.Component.DbContext/README.md): EF Core schema and queries
 - [Enhanced.Testing.Component.Kafka](https://raw.githubusercontent.com/duskembayev/Enhanced.Testing.Component/main/src/Enhanced.Testing.Component.Kafka/README.md): Kafka/Redpanda, producer and consumer, waiting for messages, topics per test
 - [Enhanced.Testing.Component.Redis](https://raw.githubusercontent.com/duskembayev/Enhanced.Testing.Component/main/src/Enhanced.Testing.Component.Redis/README.md): Redis/Redis Stack, data isolation
@@ -27,6 +27,7 @@ Each package ships XML documentation next to its assembly (`<NuGet packages fold
 - [Test isolation](https://raw.githubusercontent.com/duskembayev/Enhanced.Testing.Component/main/docs/test-isolation.md)
 - [Fast component tests](https://raw.githubusercontent.com/duskembayev/Enhanced.Testing.Component/main/docs/fast-tests.md)
 - [Writing a custom harness](https://raw.githubusercontent.com/duskembayev/Enhanced.Testing.Component/main/docs/custom-harnesses.md)
+- [Upgrading to 2.0](https://raw.githubusercontent.com/duskembayev/Enhanced.Testing.Component/main/docs/upgrading-to-2.0.md): breaking changes from 1.x
 
 ## Optional
 

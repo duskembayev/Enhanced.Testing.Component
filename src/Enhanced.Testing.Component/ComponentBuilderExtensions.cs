@@ -26,6 +26,26 @@ public static class ComponentBuilderExtensions
                         .AddDependency(harness);
 
     /// <summary>
+    ///     Builds and starts the component.
+    /// </summary>
+    /// <param name="componentBuilder">
+    ///     The component builder.
+    /// </param>
+    /// <param name="cancellationToken">
+    ///     The cancellation token.
+    /// </param>
+    /// <returns>
+    ///     The started component.
+    /// </returns>
+    public static async Task<IComponent> StartAsync(this IComponentBuilder componentBuilder,
+        CancellationToken cancellationToken = default)
+    {
+        var component = componentBuilder.Build();
+        await component.StartAsync(cancellationToken).ConfigureAwait(false);
+        return component;
+    }
+
+    /// <summary>
     ///     Removes the hosted service of type <typeparamref name="TService" /> so it does not run during the test.
     ///     Registrations by type, instance and factory made by the application, or by builder configuration added
     ///     before this call, are removed. Registrations added by builder configuration after this call are kept.
