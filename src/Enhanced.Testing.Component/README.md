@@ -31,7 +31,11 @@ public class OrdersFixture : IAsyncLifetime
     public Task DisposeAsync() => _component.StopAsync(CancellationToken.None);
 }
 
-public class OrdersTests(OrdersFixture fixture) : IClassFixture<OrdersFixture>
+[CollectionDefinition("Orders")]
+public class OrdersCollection : ICollectionFixture<OrdersFixture>;
+
+[Collection("Orders")]
+public class OrdersTests(OrdersFixture fixture)
 {
     [Fact]
     public async Task ShouldBeHealthy()
@@ -45,6 +49,10 @@ public class OrdersTests(OrdersFixture fixture) : IClassFixture<OrdersFixture>
 
 `HttpClientHarness.CreateClient()` returns an `HttpClient` that calls the application in memory through `TestServer`,
 without opening network ports.
+
+The collection starts the fixture once for all test classes marked with `[Collection("Orders")]`; with
+`IClassFixture<OrdersFixture>` every test class would start its own application. See
+[Sharing a component between tests](https://github.com/duskembayev/Enhanced.Testing.Component/blob/main/docs/lifecycle.md#sharing-a-component-between-tests).
 
 The test project references the application project, and `Program` must be visible to it: with top-level statements
 before .NET 10, add `<InternalsVisibleTo Include="MyApp.Tests" />` to the application project or declare
