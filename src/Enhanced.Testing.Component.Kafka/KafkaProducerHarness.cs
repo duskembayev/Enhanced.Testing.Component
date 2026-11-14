@@ -85,12 +85,10 @@ public class KafkaProducerHarness<TKey, TValue> : Harness
     }
 
     /// <inheritdoc />
-    protected override Task OnStart(CancellationToken cancellationToken)
+    protected override async Task OnStart(CancellationToken cancellationToken)
     {
-        _producer = KafkaProducerFactory.Create(_kafkaHarness.GetConnectionString(), Topic, KeySerializer,
-            ValueSerializer);
-
-        return Task.CompletedTask;
+        _producer = await KafkaProducerFactory.CreateAsync(_kafkaHarness.GetConnectionString(), Topic, KeySerializer,
+            ValueSerializer, cancellationToken).ConfigureAwait(false);
     }
 
     /// <inheritdoc />

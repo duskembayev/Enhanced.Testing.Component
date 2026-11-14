@@ -5,6 +5,7 @@ using Enhanced.Testing.Component.DbContext;
 using Enhanced.Testing.Component.GrpcClient;
 using Enhanced.Testing.Component.PostgreSql;
 using Enhanced.Testing.Component.Redis;
+using Enhanced.Testing.Component.WireMock;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -12,6 +13,8 @@ using Microsoft.Extensions.DependencyInjection;
 using Npgsql;
 using SampleService.Models;
 using SampleService.Services;
+using WireMock.RequestBuilders;
+using WireMock.ResponseBuilders;
 
 namespace SampleService.Tests;
 
@@ -214,29 +217,125 @@ public class EnvironmentTests(SampleEnvironmentFixture fixture) : IClassFixture<
         Assert.Equal(3, names.Distinct().Count());
     }
 
-    [Fact]
-    public async Task ShouldWaitForStartingComponentWhenStopped()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ShouldWaitForStartingComponentWhenStopped(bool blockSynchronously)
     {
-        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var entered = new ManualResetEventSlim();
+        using var release = new ManualResetEventSlim();
         var environment = await ComponentEnvironment.Create().StartAsync();
         var http = new HttpClientHarness();
-        var start = environment.CreateComponent<Program>()
-                               .AddDependency(new BlockingDependency(entered, release))
-                               .AddHarness(http)
-                               .StartAsync();
+        var builder = environment.CreateComponent<Program>()
+                                 .AddDependency(new BlockingDependency(entered, release, blockSynchronously))
+                                 .AddHarness(http);
 
-        await entered.Task;
+        var start = Task.Run(() => builder.StartAsync());
+
+        Assert.True(entered.Wait(TimeSpan.FromSeconds(30)));
         var stop = environment.StopAsync();
 
+        await Task.Delay(200);
         Assert.False(stop.IsCompleted);
-        release.SetResult();
+        release.Set();
 
         var component = await start;
         await stop;
 
         Assert.Throws<InvalidOperationException>(() => component.Services);
         Assert.False(http.IsStarted);
+    }
+
+    [Fact]
+    public async Task ShouldCancelStopThatWaitsForStartingComponent()
+    {
+        using var entered = new ManualResetEventSlim();
+        using var release = new ManualResetEventSlim();
+        var environment = await ComponentEnvironment.Create().StartAsync();
+        var builder = environment.CreateComponent<Program>()
+                                 .AddDependency(new BlockingDependency(entered, release, true));
+
+        var start = Task.Run(() => builder.StartAsync());
+        Assert.True(entered.Wait(TimeSpan.FromSeconds(30)));
+
+        using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(200));
+        await Assert.ThrowsAsync<OperationCanceledException>(() => environment.StopAsync(cts.Token));
+
+        release.Set();
+        await start;
+        await environment.StopAsync();
+    }
+
+    [Fact]
+    public async Task ShouldNotDropDatabaseThatAlreadyExisted()
+    {
+        var existing = $"existing_{Guid.NewGuid():N}";
+        await fixture.PostgreSql.CreateDatabaseAsync(existing);
+
+        var database = new PostgreSqlDatabaseHarness(fixture.PostgreSql) { Database = existing };
+        var builder = fixture.Environment.CreateComponent<Program>().AddHarness(database);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => builder.StartAsync());
+
+        Assert.True(await DatabaseExistsAsync(existing));
+        Assert.False(database.IsStarted);
+
+        await fixture.PostgreSql.DropDatabaseAsync(existing);
+    }
+
+    [Fact]
+    public async Task ShouldRollBackCleanlyWhenDatabaseNameIsInvalid()
+    {
+        var database = new PostgreSqlDatabaseHarness(fixture.PostgreSql) { Database = new string('a', 64) };
+        var builder = fixture.Environment.CreateComponent<Program>().AddHarness(database);
+
+        await Assert.ThrowsAsync<ArgumentException>(() => builder.StartAsync());
+
+        Assert.False(database.IsStarted);
+    }
+
+    [Fact]
+    public async Task ShouldShareWireMockServerBetweenComponents()
+    {
+        var quotesApi = new WireMockHarness { ConfigurationKey = "QuotesApi:BaseUrl" };
+
+        await using var environment = await ComponentEnvironment.Create().AddHarness(quotesApi).StartAsync();
+
+        quotesApi.Server
+                 .Given(Request.Create().WithPath("/quote").UsingGet())
+                 .RespondWith(Response.Create().WithBody("shared"));
+
+        for (var i = 0; i < 2; i++)
+        {
+            var http = new HttpClientHarness();
+            await using var component = await environment.CreateComponent<Program>().AddHarness(http).StartAsync();
+
+            Assert.Equal("shared", await http.CreateClient().GetStringAsync("/quote"));
+        }
+
+        Assert.Equal(2, quotesApi.Server.LogEntries.Count());
+    }
+
+    [Fact]
+    public async Task ShouldCreateGrpcClientAfterFailedAttemptDuringStart()
+    {
+        var grpcClient = new GrpcClientHarness();
+        Exception? early = null;
+
+        await using var component = await fixture.Environment
+                                                 .CreateComponent<Program>()
+                                                 .AddHarness(grpcClient)
+                                                 .AddDependency(new StartProbe(() =>
+                                                     early = Record.Exception(() =>
+                                                         grpcClient.CreateClient<Greeter.GreeterClient>())))
+                                                 .StartAsync();
+
+        Assert.IsType<InvalidOperationException>(early);
+
+        var reply = await grpcClient.CreateClient<Greeter.GreeterClient>()
+                                    .SayHelloAsync(new HelloRequest { Name = "probe" });
+
+        Assert.Equal("Hello probe", reply.Message);
     }
 
     [Fact]
@@ -262,13 +361,31 @@ public class EnvironmentTests(SampleEnvironmentFixture fixture) : IClassFixture<
         await Task.WhenAll(environment.StopAsync(), environment.DisposeAsync().AsTask());
     }
 
-    private sealed class BlockingDependency(TaskCompletionSource entered, TaskCompletionSource release)
-        : IComponentDependency
+    private sealed class BlockingDependency(
+        ManualResetEventSlim entered,
+        ManualResetEventSlim release,
+        bool blockSynchronously) : IComponentDependency
     {
         public async Task OnStartAsync(IComponent component, CancellationToken cancellationToken)
         {
-            entered.SetResult();
-            await release.Task;
+            if (!blockSynchronously)
+            {
+                await Task.Yield();
+            }
+
+            entered.Set();
+            release.Wait(TimeSpan.FromSeconds(30));
+        }
+
+        public Task OnStopAsync(IComponent component, CancellationToken cancellationToken) => Task.CompletedTask;
+    }
+
+    private sealed class StartProbe(Action onStart) : IComponentDependency
+    {
+        public Task OnStartAsync(IComponent component, CancellationToken cancellationToken)
+        {
+            onStart();
+            return Task.CompletedTask;
         }
 
         public Task OnStopAsync(IComponent component, CancellationToken cancellationToken) => Task.CompletedTask;

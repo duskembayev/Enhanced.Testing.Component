@@ -111,5 +111,6 @@ await using var component = await fixture.Environment
 | `Database` | `test_<guid>`, new on every start | The database name; `CurrentDatabase` returns the one in use |
 
 `GetConnectionString()` returns the connection string to the test. The database is dropped when the component stops,
-even if its start was cancelled. In a component that also owns the
+even if its start was cancelled. If a database with a fixed `Database` name already exists, the start fails and that
+database is left untouched. In a component that also owns the
 `PostgreSqlHarness`, add the database harness after it.

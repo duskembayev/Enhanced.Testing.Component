@@ -8,7 +8,7 @@ internal sealed class Component<TEntryPoint> : IEnvironmentComponent where TEntr
     private readonly IReadOnlyList<IComponentDependency> _dependencies;
     private readonly RunningComponentEnvironment? _environment;
     private readonly bool[] _startedDependencies;
-    private Task? _start;
+    private readonly TaskCompletionSource _startCompleted = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private bool _appDisposed;
     private ComponentState _state;
 
@@ -75,26 +75,19 @@ internal sealed class Component<TEntryPoint> : IEnvironmentComponent where TEntr
         }
 
         _environment?.Attach(this);
-        _state = ComponentState.Starting;
-        _start = StartCoreAsync(cancellationToken);
-        await _start.ConfigureAwait(false);
-    }
-
-    public async Task WaitForStartAsync()
-    {
-        if (_start is null)
-        {
-            return;
-        }
 
         try
         {
-            await _start.ConfigureAwait(false);
+            _state = ComponentState.Starting;
+            await StartCoreAsync(cancellationToken).ConfigureAwait(false);
         }
-        catch
+        finally
         {
+            _startCompleted.TrySetResult();
         }
     }
+
+    public Task WaitForStartAsync() => _startCompleted.Task;
 
     private async Task StartCoreAsync(CancellationToken cancellationToken)
     {

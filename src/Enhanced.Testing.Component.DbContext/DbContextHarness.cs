@@ -162,7 +162,7 @@ public class DbContextHarness<TContext> : Harness where TContext : Microsoft.Ent
 
         var context = CreateDbContext();
 
-        await using (context)
+        await using (context.ConfigureAwait(false))
         {
             await context.Database.EnsureCreatedAsync(cancellationToken).ConfigureAwait(false);
         }
