@@ -1,0 +1,35 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFrameworks>net8.0;net9.0;net10.0</TargetFrameworks>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <TestTfmsInParallel>false</TestTfmsInParallel>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.12.0" />
+    <PackageReference Include="xunit" Version="2.9.3" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="4.0.1">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Enhanced.Testing.Component.DbContext\Enhanced.Testing.Component.DbContext.csproj" />
+    <ProjectReference Include="..\..\src\Enhanced.Testing.Component.GrpcClient\Enhanced.Testing.Component.GrpcClient.csproj" />
+    <ProjectReference Include="..\..\src\Enhanced.Testing.Component.Kafka\Enhanced.Testing.Component.Kafka.csproj" />
+    <ProjectReference Include="..\..\src\Enhanced.Testing.Component.PostgreSql\Enhanced.Testing.Component.PostgreSql.csproj" />
+    <ProjectReference Include="..\..\src\Enhanced.Testing.Component.Redis\Enhanced.Testing.Component.Redis.csproj" />
+    <ProjectReference Include="..\..\src\Enhanced.Testing.Component.Time\Enhanced.Testing.Component.Time.csproj" />
+    <ProjectReference Include="..\..\src\Enhanced.Testing.Component\Enhanced.Testing.Component.csproj" />
+    <ProjectReference Include="..\..\src\Enhanced.Testing.Component.WireMock\Enhanced.Testing.Component.WireMock.csproj" />
+    <ProjectReference Include="..\..\examples\SampleService\SampleService.csproj" />
+  </ItemGroup>
+
+</Project>

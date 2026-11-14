@@ -6,7 +6,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using SampleService.Services;
 
-namespace SampleService.Tests;
+namespace Enhanced.Testing.Component.Tests;
 
 public class ComponentBuilderTests
 {

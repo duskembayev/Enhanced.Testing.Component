@@ -10,7 +10,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Testcontainers.Redis;
 
-namespace SampleService.Tests;
+namespace Enhanced.Testing.Component.Tests;
 
 public class LifecycleTests
 {

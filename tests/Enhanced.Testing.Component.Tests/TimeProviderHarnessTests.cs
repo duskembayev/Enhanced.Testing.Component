@@ -3,7 +3,7 @@ using Enhanced.Testing.Component;
 using Enhanced.Testing.Component.Time;
 using Microsoft.Extensions.DependencyInjection;
 
-namespace SampleService.Tests;
+namespace Enhanced.Testing.Component.Tests;
 
 public class TimeProviderHarnessTests : IAsyncLifetime
 {

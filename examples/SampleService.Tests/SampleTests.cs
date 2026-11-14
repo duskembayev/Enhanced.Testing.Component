@@ -3,7 +3,11 @@ using Microsoft.EntityFrameworkCore;
 
 namespace SampleService.Tests;
 
-public class SampleTests(SampleServiceFixture fixture) : IClassFixture<SampleServiceFixture>
+[CollectionDefinition("SampleService")]
+public class SampleServiceCollection : ICollectionFixture<SampleServiceFixture>;
+
+[Collection("SampleService")]
+public class SampleTests(SampleServiceFixture fixture)
 {
     private static readonly TimeSpan MessageTimeout = TimeSpan.FromSeconds(10);
 
