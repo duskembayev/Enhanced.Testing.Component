@@ -27,6 +27,23 @@ A harness that fails to stop does not prevent the others from stopping. The fail
 calling `StopAsync` again retries only the steps that did not complete. If the cancellation token fires, the remaining
 steps are skipped and `OperationCanceledException` is thrown; calling `StopAsync` again finishes them.
 
+## When the application stops on its own
+
+The application can stop without the component stopping it. The usual reason is a `BackgroundService` that throws:
+by default .NET then stops the whole host (`BackgroundServiceExceptionBehavior.StopHost`). The component notices it,
+and from then on `Services`, `Server` and the `CreateClient` methods throw `InvalidOperationException` instead of
+handing out a disposed application:
+
+```
+The application stopped while the component was running: background service 'OutboxPublisher' failed with
+KafkaException: Local: Unknown topic
+```
+
+The exception of the background service is the inner exception. When the application stops for another reason (for
+example, it calls `IHostApplicationLifetime.StopApplication`), the message says only that the component did not stop
+it. `StopAsync` works as usual in both cases. See [Common pitfalls](pitfalls.md#the-application-stops-in-the-middle-of-the-run)
+for the typical causes.
+
 ## Ordering harnesses
 
 - Add a harness after the harnesses it uses, for example `DbContextHarness` after `PostgreSqlHarness`, or a Kafka

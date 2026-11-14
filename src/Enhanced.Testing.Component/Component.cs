@@ -1,5 +1,7 @@
 using System.Runtime.ExceptionServices;
 using Microsoft.AspNetCore.TestHost;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 
 namespace Enhanced.Testing.Component;
 
@@ -9,6 +11,8 @@ internal sealed class Component<TEntryPoint> : IComponent where TEntryPoint : cl
     private readonly IReadOnlyList<IComponentDependency> _dependencies;
     private readonly bool[] _startedDependencies;
     private bool _appDisposed;
+    private ApplicationStop? _applicationStop;
+    private CancellationTokenRegistration _applicationStopping;
     private ComponentState _state;
 
     public Component(WebApplicationFactory<TEntryPoint> appFactory, IReadOnlyList<IComponentDependency> dependencies)
@@ -90,6 +94,7 @@ internal sealed class Component<TEntryPoint> : IComponent where TEntryPoint : cl
 
             _ = _appFactory.Server;
             _state = ComponentState.Started;
+            WatchApplicationStop();
         }
         catch (Exception startException)
         {
@@ -117,6 +122,8 @@ internal sealed class Component<TEntryPoint> : IComponent where TEntryPoint : cl
         }
 
         _state = ComponentState.Stopping;
+        _applicationStopping.Dispose();
+        _applicationStopping = default;
 
         List<Exception>? exceptions = null;
         var cancelled = false;
@@ -245,17 +252,72 @@ internal sealed class Component<TEntryPoint> : IComponent where TEntryPoint : cl
     private static bool IsCancellation(Exception exception, CancellationToken cancellationToken) =>
         exception is OperationCanceledException && cancellationToken.IsCancellationRequested;
 
+    private void WatchApplicationStop()
+    {
+        var lifetime = _appFactory.Services.GetService<IHostApplicationLifetime>();
+
+        if (lifetime is not null)
+        {
+            _applicationStopping = lifetime.ApplicationStopping.Register(OnApplicationStopping);
+        }
+    }
+
+    private void OnApplicationStopping()
+    {
+        string? service = null;
+        Exception? failure = null;
+
+        try
+        {
+            foreach (var hostedService in _appFactory.Services.GetServices<IHostedService>())
+            {
+                if (hostedService is BackgroundService { ExecuteTask: { IsFaulted: true } task })
+                {
+                    service = hostedService.GetType().Name;
+                    failure = task.Exception.InnerExceptions.Count == 1 ? task.Exception.InnerException : task.Exception;
+                    break;
+                }
+            }
+        }
+        catch (Exception)
+        {
+            service = null;
+            failure = null;
+        }
+
+        Volatile.Write(ref _applicationStop, new ApplicationStop(service, failure));
+    }
+
     private void ThrowIfComponentNotStarted()
     {
         switch (_state)
         {
             case ComponentState.Started:
+                Volatile.Read(ref _applicationStop)?.Throw();
                 return;
             case ComponentState.Stopping:
             case ComponentState.Stopped:
                 throw new InvalidOperationException("The component has been stopped.");
             default:
                 throw new InvalidOperationException("The component has not been started.");
+        }
+    }
+
+    private sealed class ApplicationStop(string? service, Exception? failure)
+    {
+        public void Throw()
+        {
+            if (failure is null)
+            {
+                throw new InvalidOperationException(
+                    "The application stopped while the component was running, and the component did not stop it. " +
+                    "See the application's log for the reason.");
+            }
+
+            throw new InvalidOperationException(
+                $"The application stopped while the component was running: background service '{service}' failed " +
+                $"with {failure.GetType().Name}: {failure.Message}",
+                failure);
         }
     }
 
