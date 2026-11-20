@@ -83,6 +83,9 @@ var redpanda = new RedpandaHarness { Topics = ["orders"], ConnectionName = "Kafk
 var consumer = new KafkaConsumerHarness<string, string>(redpanda) { Topic = "orders" };
 ```
 
+To run another Kafka-compatible broker, derive from `KafkaBrokerHarness<TContainer>`: create the container and return
+its bootstrap servers, and `Topics` and `CreateTopicAsync` work as in the built-in harnesses.
+
 The native image has no `kafka-*` command-line tools; the harnesses create topics through the Kafka admin API.
 `ConnectionName`, `Image`, `ConfigureContainer` and `StartConcurrently` are shared by all container harnesses; see
 [Enhanced.Testing.Component](https://github.com/duskembayev/Enhanced.Testing.Component/blob/main/src/Enhanced.Testing.Component/README.md#container-harnesses).
