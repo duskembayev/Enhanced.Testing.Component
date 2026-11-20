@@ -59,7 +59,28 @@ jobs:
           if [ -n "$VERSION" ]; then
             exclude+=(--exclude "v$VERSION")
           fi
-          if baseline=$(git describe --tags --abbrev=0 --match 'v[0-9]*.[0-9]*.[0-9]*' "${exclude[@]}" 2>/dev/null); then
+          published() {
+            local package index
+            for package in src/*/*.csproj; do
+              package=$(basename "$package" .csproj | tr '[:upper:]' '[:lower:]')
+              index=$(curl -fsS --retry 3 "https://api.nuget.org/v3-flatcontainer/$package/index.json") || return 2
+              grep -qF "\"$1\"" <<< "$index" || return 1
+            done
+          }
+          while baseline=$(git describe --tags --abbrev=0 --match 'v[0-9]*.[0-9]*.[0-9]*' "${exclude[@]}" 2>/dev/null); do
+            status=0
+            published "${baseline#v}" || status=$?
+            if [ "$status" -eq 1 ]; then
+              echo "::notice::${baseline#v} is not on nuget.org yet, trying the release before it"
+              exclude+=(--exclude "$baseline")
+              continue
+            fi
+            if [ "$status" -eq 2 ]; then
+              echo "::warning::Could not check nuget.org, using ${baseline#v} as is"
+            fi
+            break
+          done
+          if [ -n "$baseline" ]; then
             echo "Package validation baseline: ${baseline#v}"
             echo "PackageValidationBaselineVersion=${baseline#v}" >> "$GITHUB_ENV"
           else
