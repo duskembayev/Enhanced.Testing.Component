@@ -73,14 +73,14 @@ var greeter = new WireMockHarness { ConfigurationKey = "Greeter:Address", UseHtt
 ```csharp
 greeter.Server
        .Given(Request.Create()
-                     .UsingGrpc<Greeter.GreeterClient>(nameof(Greeter.GreeterClient.SayHelloAsync))
+                     .UsingGrpc(Greeter.Descriptor, nameof(Greeter.GreeterClient.SayHelloAsync))
                      .WithGrpcMessage<HelloRequest>(request => request.Name == "world"))
        .RespondWith(Response.Create().WithGrpcMessage(new HelloReply { Message = "Hello, world" }));
 ```
 
-- `UsingGrpc<TService>(method)` takes the generated client or service base class and the name of one of its methods,
-  so a wrong name does not compile. Without generated code, pass the full method name as a string:
-  `UsingGrpc("greet.Greeter/SayHello")`.
+- `UsingGrpc(service, method)` takes the service descriptor from the generated code and a method name. Name the
+  method with `nameof` on the generated client, so a wrong name does not compile. Without generated code, pass the
+  full method name as a string: `UsingGrpc("greet.Greeter/SayHello")`.
 - `WithGrpcMessage<TRequest>(predicate)` matches the request message; leave it out to match every call of the method.
 - `WithGrpcMessage(message)` responds with a message, and `WithGrpcStatus(StatusCode.NotFound, "...")` fails the
   call with a status.
@@ -91,7 +91,7 @@ Streaming calls use the same extensions with several messages:
 
 ```csharp
 greeter.Server
-       .Given(Request.Create().UsingGrpc<Greeter.GreeterClient>(nameof(Greeter.GreeterClient.SayHellos)))
+       .Given(Request.Create().UsingGrpc(Greeter.Descriptor, nameof(Greeter.GreeterClient.SayHellos)))
        .RespondWith(Response.Create()
                             .WithGrpcMessages(new HelloReply { Message = "first" }, new HelloReply { Message = "second" })
                             .WithGrpcStatus(StatusCode.Aborted, "The stream broke."));
