@@ -42,6 +42,25 @@ Assert.Single(quotesApi.Server.LogEntries);
 - `BaseAddress` and `CreateClient()` give the test the server's address or an `HttpClient` for it.
 - `ConfigureServer` customizes the `WireMockServerSettings` before the server starts.
 
+## Service discovery
+
+An application that finds its dependencies by name with `Microsoft.Extensions.ServiceDiscovery` needs no extra
+configuration key. Give the harness the service name, and it registers the server as that service:
+
+```csharp
+var payments = new WireMockHarness { ServiceName = "payments" };
+var greeter = new WireMockHarness { ServiceName = "greeter", EndpointName = "grpc", UseHttp2 = true };
+```
+
+| The application calls | Harness |
+|---|---|
+| `http://payments` or `https+http://payments` | `ServiceName = "payments"` |
+| `http://_api.payments` (a named endpoint) | `ServiceName = "payments", EndpointName = "api"` |
+
+The address is passed to the application as `Services:{ServiceName}:{EndpointName}:0`; `EndpointName` is `http`
+unless set. The server speaks plain HTTP, so a client fixed to `https://payments` cannot be pointed at it. Endpoints
+of the same service listed in the application's own configuration are not removed.
+
 ## Faking a gRPC service
 
 The same harness fakes a gRPC service the application calls. Set `UseHttp2`, and describe calls and responses with
