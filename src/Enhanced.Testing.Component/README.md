@@ -63,7 +63,9 @@ before .NET 10, add `<InternalsVisibleTo Include="MyApp.Tests" />` to the applic
 
 `StartAsync` starts all container harnesses in parallel, then the other harnesses in the order they were added, then
 the application; a failed start stops everything again. `StopAsync` stops the application first, then the harnesses
-in reverse order, and removes the containers. Add a harness after the harnesses it uses. See
+in reverse order, and removes the containers. Add a harness after the harnesses it uses. If the application stops on
+its own, for example because a `BackgroundService` threw, the component's members throw an
+`InvalidOperationException` that names the failed service and carries its exception. See
 [Component lifecycle](https://github.com/duskembayev/Enhanced.Testing.Component/blob/main/docs/lifecycle.md) for details.
 
 ## Container harnesses

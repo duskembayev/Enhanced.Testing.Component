@@ -77,12 +77,14 @@ ComponentBuilder.Create<Program>()
 
 ## The application stops in the middle of the run
 
-**Symptom:** from some test on, every test fails with
-`ObjectDisposedException: Cannot access a disposed object. Object name: 'IServiceProvider'`.
+**Symptom:** from some test on, every test fails with `InvalidOperationException: The application stopped while the
+component was running: background service '...' failed with ...`. Versions of the library that do not detect this
+fail with `ObjectDisposedException: Cannot access a disposed object. Object name: 'IServiceProvider'` instead.
 
-When a `BackgroundService` throws, .NET stops the host (`BackgroundServiceExceptionBehavior.StopHost`). The
-component is still marked as started, but the application behind it is gone. The cause is in the application's log:
-run the tests with `--logger "console;verbosity=detailed"` and search for `BackgroundService failed`.
+When a `BackgroundService` throws, .NET stops the host (`BackgroundServiceExceptionBehavior.StopHost`), and the
+application behind the component is gone. The component reports the background service and its exception. Without
+that report, the cause is in the application's log: run the tests with `--logger "console;verbosity=detailed"` and
+search for `BackgroundService failed`.
 
 A typical cause is a background service that needs something the fixture does not provide, such as a Kafka topic
 that was never created (`Unknown topic or partition`). Either provide it (add every topic the application produces
