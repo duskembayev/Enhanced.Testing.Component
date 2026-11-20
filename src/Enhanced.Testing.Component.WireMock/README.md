@@ -85,8 +85,23 @@ greeter.Server
 - `WithGrpcMessage(message)` responds with a message, and `WithGrpcStatus(StatusCode.NotFound, "...")` fails the
   call with a status.
 - A call that no stub matches fails on the client with the `Unimplemented` status.
-- The extensions cover unary calls, not streaming.
 - A server with `UseHttp2` does not answer HTTP/1.1 requests. Use one harness for gRPC and another for HTTP APIs.
+
+Streaming calls use the same extensions with several messages:
+
+```csharp
+greeter.Server
+       .Given(Request.Create().UsingGrpc<Greeter.GreeterClient>(nameof(Greeter.GreeterClient.SayHellos)))
+       .RespondWith(Response.Create()
+                            .WithGrpcMessages(new HelloReply { Message = "first" }, new HelloReply { Message = "second" })
+                            .WithGrpcStatus(StatusCode.Aborted, "The stream broke."));
+```
+
+- `WithGrpcMessages(messages)` responds to a server streaming call; `WithGrpcStatus` after it fails the call once the
+  client has read the messages.
+- `WithGrpcMessages<TRequest>(predicate)` matches a client streaming call by all the messages the client sent.
+- The server answers when the client has completed its request, and sends all response messages together. A duplex
+  call works when the client sends everything before it reads; a call in which the two sides take turns does not.
 
 The package depends on `WireMock.Net.Minimal`. Add the full `WireMock.Net` package if you need its extra matchers
 (GraphQL, ProtoBuf).
