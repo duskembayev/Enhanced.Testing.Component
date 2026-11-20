@@ -1,6 +1,11 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
+    <PackageTags>$(PackageTags);wiremock;mock;http</PackageTags>
+    <PackageDescription>In-process fakes of external HTTP APIs with WireMock.Net for integration (component) tests of ASP.NET Core applications. Part of Enhanced.Testing.Component.</PackageDescription>
+  </PropertyGroup>
+
+  <PropertyGroup>
     <DisablePackageBaselineValidation Condition="'$(PackageValidationBaselineVersion)' != '' and $([MSBuild]::VersionLessThan('$(PackageValidationBaselineVersion)', '1.4.0'))">true</DisablePackageBaselineValidation>
   </PropertyGroup>
 

@@ -10,10 +10,10 @@
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <RepositoryUrl>https://github.com/duskembayev/Enhanced.Testing.Component</RepositoryUrl>
     <PackageProjectUrl>https://github.com/duskembayev/Enhanced.Testing.Component</PackageProjectUrl>
-    <PackageTags>component testing, asp.net, harness</PackageTags>
+    <PackageTags>integration-testing;component-testing;testing;aspnetcore;testcontainers;webapplicationfactory;xunit;harness</PackageTags>
     <PackageIcon>icons/icon.png</PackageIcon>
     <PackageReadmeFile>README.md</PackageReadmeFile>
-    <PackageDescription>Enhanced.Testing.Component is a NuGet package that provides a set of tools for component testing ASP.NET Core applications.</PackageDescription>
+    <PackageDescription>Integration (component) tests for ASP.NET Core: the application runs in memory through WebApplicationFactory, and its real dependencies (PostgreSQL, Kafka, Redis) run in Docker through Testcontainers.</PackageDescription>
   </PropertyGroup>
 
   <PropertyGroup>

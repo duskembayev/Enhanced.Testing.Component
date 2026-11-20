@@ -2,9 +2,10 @@
 
 [![NuGet](https://img.shields.io/nuget/v/Enhanced.Testing.Component)](https://www.nuget.org/packages/Enhanced.Testing.Component)
 
-The core of [Enhanced.Testing.Component](https://github.com/duskembayev/Enhanced.Testing.Component): a component that
-hosts your ASP.NET Core application in memory together with its dependencies ("harnesses"), plus an HTTP client
-harness and the base classes for writing your own harnesses.
+The core of [Enhanced.Testing.Component](https://github.com/duskembayev/Enhanced.Testing.Component), a library for
+integration (component) tests of ASP.NET Core applications: a component that hosts your application in memory through
+`WebApplicationFactory` together with its dependencies ("harnesses"), plus an HTTP client harness and the base classes
+for writing your own harnesses.
 
 ```shell
 dotnet add package Enhanced.Testing.Component
