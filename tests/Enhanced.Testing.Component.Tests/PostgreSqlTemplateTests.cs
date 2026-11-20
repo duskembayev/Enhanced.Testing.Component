@@ -3,7 +3,7 @@ using Enhanced.Testing.Component.PostgreSql;
 using Microsoft.EntityFrameworkCore;
 using SampleService.Models;
 
-namespace SampleService.Tests;
+namespace Enhanced.Testing.Component.Tests;
 
 public sealed class PostgreSqlTemplateTests : IAsyncLifetime
 {

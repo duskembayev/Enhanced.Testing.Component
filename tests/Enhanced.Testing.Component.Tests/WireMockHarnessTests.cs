@@ -6,7 +6,7 @@ using Microsoft.Extensions.DependencyInjection;
 using WireMock.RequestBuilders;
 using WireMock.ResponseBuilders;
 
-namespace SampleService.Tests;
+namespace Enhanced.Testing.Component.Tests;
 
 public class WireMockHarnessTests : IAsyncLifetime
 {

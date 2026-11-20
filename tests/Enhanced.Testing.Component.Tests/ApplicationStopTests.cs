@@ -4,7 +4,7 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 
-namespace SampleService.Tests;
+namespace Enhanced.Testing.Component.Tests;
 
 public class ApplicationStopTests
 {

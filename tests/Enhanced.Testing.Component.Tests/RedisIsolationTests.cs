@@ -4,7 +4,7 @@ using Microsoft.Extensions.DependencyInjection;
 using SampleService.Services;
 using StackExchange.Redis;
 
-namespace SampleService.Tests;
+namespace Enhanced.Testing.Component.Tests;
 
 public sealed class RedisIsolationFixture : IAsyncLifetime
 {

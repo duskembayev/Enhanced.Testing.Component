@@ -3,7 +3,7 @@ using Enhanced.Testing.Component.PostgreSql;
 using Enhanced.Testing.Component.Redis;
 using Testcontainers.Redis;
 
-namespace SampleService.Tests;
+namespace Enhanced.Testing.Component.Tests;
 
 public class ContainerConfigurationTests
 {

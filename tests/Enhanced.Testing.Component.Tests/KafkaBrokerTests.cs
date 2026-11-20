@@ -3,7 +3,7 @@ using Enhanced.Testing.Component.Kafka;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 
-namespace SampleService.Tests;
+namespace Enhanced.Testing.Component.Tests;
 
 public abstract class KafkaBrokerFixture : IAsyncLifetime
 {

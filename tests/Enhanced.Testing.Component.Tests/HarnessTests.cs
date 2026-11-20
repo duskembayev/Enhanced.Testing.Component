@@ -4,7 +4,7 @@ using Enhanced.Testing.Component.Kafka;
 using Enhanced.Testing.Component.PostgreSql;
 using Npgsql;
 
-namespace SampleService.Tests;
+namespace Enhanced.Testing.Component.Tests;
 
 public class HarnessTests
 {
