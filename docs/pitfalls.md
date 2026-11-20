@@ -112,6 +112,8 @@ Tests that share a component share the application: its caches, its data, and ev
   registered in the application. Before counting calls, clear the calls recorded by earlier tests.
 - Clean shared data between tests when identifiers cannot be unique: `RedisDatabaseHarness.FlushAsync`, or a
   database per test from a template.
+- When a test needs an application that nothing has touched, create a component for it from a shared
+  `ComponentEnvironment`: the containers keep running and only the application starts again.
 
 ## Many test projects at once
 

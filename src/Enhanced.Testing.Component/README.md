@@ -89,7 +89,11 @@ public class OrdersEnvironment : IAsyncLifetime
     public Task DisposeAsync() => Environment?.StopAsync() ?? Task.CompletedTask;
 }
 
-public class OrdersTests(OrdersEnvironment fixture) : IClassFixture<OrdersEnvironment>
+[CollectionDefinition("Orders")]
+public class OrdersCollection : ICollectionFixture<OrdersEnvironment>;
+
+[Collection("Orders")]
+public class OrdersTests(OrdersEnvironment fixture)
 {
     [Fact]
     public async Task ShouldServeWarmedUpCatalog()
