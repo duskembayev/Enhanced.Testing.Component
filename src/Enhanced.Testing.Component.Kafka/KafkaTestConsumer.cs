@@ -8,7 +8,8 @@ namespace Enhanced.Testing.Component.Kafka;
 /// <remarks>
 ///     Create it with
 ///     <see cref="KafkaHarnessExtensions.CreateConsumerAsync{TKey, TValue}" /> and dispose it at the end of the test.
-///     It reads partition 0 of the topic only. It is not thread-safe: do not consume, wait or seek concurrently.
+///     It reads every partition the topic has when the consumer is created; partitions added later are not read. It is
+///     not thread-safe: do not consume, wait or seek concurrently.
 /// </remarks>
 /// <typeparam name="TKey">
 ///     The message key type.
@@ -100,21 +101,69 @@ public sealed class KafkaTestConsumer<TKey, TValue> : IDisposable
     }
 
     /// <summary>
-    ///     Moves the position to the beginning of the topic.
+    ///     Moves the position of every partition to the beginning of the topic.
     /// </summary>
     public void SeekToBeginning()
     {
         ThrowIfDisposed();
-        _reader.Seek(Offset.Beginning, Timeout.InfiniteTimeSpan);
+        _reader.SeekToBeginning();
     }
 
     /// <summary>
-    ///     Moves the position to the end of the topic.
+    ///     Moves the position of one partition to its beginning. The positions of the other partitions do not change.
+    /// </summary>
+    /// <param name="partition">
+    ///     The partition to move.
+    /// </param>
+    /// <exception cref="ArgumentException">
+    ///     Thrown if <paramref name="partition" /> is not a partition of the consumed topic.
+    /// </exception>
+    public void SeekToBeginning(TopicPartition partition)
+    {
+        ThrowIfDisposed();
+        _reader.SeekToBeginning(partition);
+    }
+
+    /// <summary>
+    ///     Moves the position of every partition to the end of the topic.
     /// </summary>
     public void SeekToEnd()
     {
         ThrowIfDisposed();
-        _reader.Seek(Offset.End, Timeout.InfiniteTimeSpan);
+        _reader.SeekToEnd();
+    }
+
+    /// <summary>
+    ///     Moves the position of one partition to its end. The positions of the other partitions do not change.
+    /// </summary>
+    /// <param name="partition">
+    ///     The partition to move.
+    /// </param>
+    /// <exception cref="ArgumentException">
+    ///     Thrown if <paramref name="partition" /> is not a partition of the consumed topic.
+    /// </exception>
+    public void SeekToEnd(TopicPartition partition)
+    {
+        ThrowIfDisposed();
+        _reader.SeekToEnd(partition);
+    }
+
+    /// <summary>
+    ///     Moves the position of one partition to the specified offset, for example the one from a consumed message.
+    ///     The positions of the other partitions do not change.
+    /// </summary>
+    /// <param name="position">
+    ///     The partition and the offset to seek to: a message offset, <see cref="Offset.Beginning" /> or
+    ///     <see cref="Offset.End" />.
+    /// </param>
+    /// <exception cref="ArgumentException">
+    ///     Thrown if <paramref name="position" /> is not in a partition of the consumed topic, or its offset is a
+    ///     special offset other than <see cref="Offset.Beginning" /> and <see cref="Offset.End" />.
+    /// </exception>
+    public void Seek(TopicPartitionOffset position)
+    {
+        ThrowIfDisposed();
+        _reader.Seek(position);
     }
 
     /// <summary>

@@ -101,7 +101,9 @@ var message = await consumer.WaitForKeyAsync("order-42", TimeSpan.FromSeconds(10
 ```
 
 Use `RedpandaHarness` instead of `KafkaHarness` if the app runs Redpanda in production, or
-`Image = KafkaHarness.ConfluentImage` for the Confluent image. The consumer harnesses read partition 0 only.
+`Image = KafkaHarness.ConfluentImage` for the Confluent image. The consumer harnesses read every partition of the
+topic (before 1.5, partition 0 only); `TopicPartitions = 3` on the broker harness creates the topics in `Topics` with
+three partitions.
 
 ## PostgreSQL: a database per test
 

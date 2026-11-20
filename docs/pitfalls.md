@@ -59,7 +59,7 @@ Assert.False(ignoredOrderWasConfirmed);
 ```
 
 The order is guaranteed only within one partition, and only if the application handles a partition's messages one
-after another. Topics created by the harness have one partition.
+after another. Topics created by the harness have one partition unless you ask for more.
 
 ## A setting from `ConfigureAppConfiguration` is ignored
 

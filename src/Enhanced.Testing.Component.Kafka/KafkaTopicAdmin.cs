@@ -12,12 +12,13 @@ internal static class KafkaTopicAdmin
     private static readonly TimeSpan RetryDelay = TimeSpan.FromMilliseconds(200);
     private static readonly TimeSpan PollInterval = TimeSpan.FromMilliseconds(50);
 
-    public static async Task<bool> TryCreateTopicAsync(string bootstrapServers, string topicName,
+    public static async Task<bool> TryCreateTopicAsync(string bootstrapServers, string topicName, int? partitions,
         CancellationToken cancellationToken)
     {
         try
         {
-            return await CreateTopicAsync(bootstrapServers, topicName, cancellationToken).ConfigureAwait(false);
+            return await CreateTopicAsync(bootstrapServers, topicName, partitions, cancellationToken)
+                       .ConfigureAwait(false);
         }
         catch (Exception exception) when (exception is KafkaException or TimeoutException)
         {
@@ -25,12 +26,12 @@ internal static class KafkaTopicAdmin
         }
     }
 
-    public static async Task EnsureTopicAsync(string bootstrapServers, string topicName,
+    public static async Task EnsureTopicAsync(string bootstrapServers, string topicName, int? partitions,
         CancellationToken cancellationToken)
     {
         try
         {
-            await CreateTopicAsync(bootstrapServers, topicName, cancellationToken).ConfigureAwait(false);
+            await CreateTopicAsync(bootstrapServers, topicName, partitions, cancellationToken).ConfigureAwait(false);
         }
         catch (Exception exception) when (exception is KafkaException or TimeoutException)
         {
@@ -39,7 +40,17 @@ internal static class KafkaTopicAdmin
         }
     }
 
-    private static async Task<bool> CreateTopicAsync(string bootstrapServers, string topicName,
+    public static int? ValidatePartitions(int? partitions, string parameterName)
+    {
+        if (partitions < 1)
+        {
+            throw new ArgumentOutOfRangeException(parameterName, partitions, "A topic has at least one partition.");
+        }
+
+        return partitions;
+    }
+
+    private static async Task<bool> CreateTopicAsync(string bootstrapServers, string topicName, int? partitions,
         CancellationToken cancellationToken)
     {
         var config = new AdminClientConfig { BootstrapServers = bootstrapServers };
@@ -51,7 +62,8 @@ internal static class KafkaTopicAdmin
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            var error = await TryCreateOnceAsync(config, topicName, cancellationToken).ConfigureAwait(false);
+            var error = await TryCreateOnceAsync(config, topicName, partitions, cancellationToken)
+                            .ConfigureAwait(false);
 
             if (!error.IsError)
             {
@@ -75,11 +87,12 @@ internal static class KafkaTopicAdmin
         }
 
         using var adminClient = new AdminClientBuilder(config).Build();
-        await WaitForLeadersAsync(adminClient, topicName, cancellationToken).ConfigureAwait(false);
+        await WaitForLeadersAsync(adminClient, topicName, created ? partitions : null, cancellationToken)
+            .ConfigureAwait(false);
         return created;
     }
 
-    private static async Task<Error> TryCreateOnceAsync(AdminClientConfig config, string topicName,
+    private static async Task<Error> TryCreateOnceAsync(AdminClientConfig config, string topicName, int? partitions,
         CancellationToken cancellationToken)
     {
         using var adminClient = new AdminClientBuilder(config).Build();
@@ -87,7 +100,9 @@ internal static class KafkaTopicAdmin
 
         try
         {
-            await adminClient.CreateTopicsAsync([new TopicSpecification { Name = topicName }], options)
+            var topic = new TopicSpecification { Name = topicName, NumPartitions = partitions ?? -1 };
+
+            await adminClient.CreateTopicsAsync([topic], options)
                              .WaitAsync(cancellationToken)
                              .ConfigureAwait(false);
 
@@ -110,7 +125,7 @@ internal static class KafkaTopicAdmin
             or ErrorCode.LeaderNotAvailable or ErrorCode.BrokerNotAvailable;
     }
 
-    private static async Task WaitForLeadersAsync(IAdminClient adminClient, string topicName,
+    private static async Task WaitForLeadersAsync(IAdminClient adminClient, string topicName, int? partitions,
         CancellationToken cancellationToken)
     {
         var stopwatch = Stopwatch.StartNew();
@@ -133,9 +148,9 @@ internal static class KafkaTopicAdmin
                 {
                     lastError = topic.Error.Reason;
                 }
-                else if (topic.Partitions.Count == 0)
+                else if (topic.Partitions.Count < (partitions ?? 1))
                 {
-                    lastError = "topic has no partitions";
+                    lastError = "topic does not have all its partitions yet";
                 }
                 else if (topic.Partitions.Any(p => p.Leader < 0 || p.Error.IsError))
                 {

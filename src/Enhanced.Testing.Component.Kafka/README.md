@@ -26,7 +26,8 @@ var component = ComponentBuilder.Create<Program>()
 ```
 
 The application reads its bootstrap servers from `ConnectionStrings:Kafka`. Topics in `Topics` are created on start
-(existing topics are kept), and the harness waits until they have a partition leader.
+(existing topics are kept), and the harness waits until they have a partition leader. They get the broker's default
+number of partitions, which is one; set `TopicPartitions` on the broker harness to create them with more.
 
 In a test, check what the application produced, or send it a message:
 
@@ -48,8 +49,16 @@ var message = await consumer.WaitForKeyAsync("order-42", TimeSpan.FromSeconds(10
 var result = await consumer.WaitForMessageAsync(r => r.Message.Value.Contains("42"), TimeSpan.FromSeconds(10));
 ```
 
-Non-matching messages are skipped; a `TimeoutException` reports how many. `SeekToBeginning`/`SeekToEnd` move the
-position the wait starts from.
+Non-matching messages are skipped; a `TimeoutException` reports how many.
+
+`SeekToBeginning` and `SeekToEnd` move the position the wait starts from. To return to a message you already know,
+seek to its partition and offset:
+
+```csharp
+consumer.Seek(result.TopicPartitionOffset);
+```
+
+`Seek(Offset, ...)` was removed in 1.5; use the methods above instead.
 
 ## A topic per test
 
@@ -66,8 +75,21 @@ await producer.ProduceAsync("order-42", "created");
 var message = await consumer.WaitForKeyAsync("order-42", TimeSpan.FromSeconds(10));
 ```
 
-All consumers, `KafkaConsumerHarness` included, read only partition 0, which is the only partition of a topic
-created with the bundled images' defaults. Messages in other partitions of a multi-partition topic are not seen.
+## Topics with several partitions
+
+Consumers, `KafkaConsumerHarness` included, read every partition the topic has when they start (before 1.5, only
+partition 0). Messages from different partitions arrive in no particular order relative to each other, so wait for a
+key or a predicate. Partitions added later are not read.
+
+```csharp
+var kafka = new KafkaHarness { Topics = ["orders"], TopicPartitions = 3 };
+
+await kafka.CreateTopicAsync("payments", 3);
+var topic = await kafka.CreateUniqueTopicAsync("orders", 3);
+```
+
+`SeekToBeginning(partition)`, `SeekToEnd(partition)` and `Seek(TopicPartitionOffset)` move one partition and leave
+the positions of the others as they are.
 
 ## Choosing a broker
 
