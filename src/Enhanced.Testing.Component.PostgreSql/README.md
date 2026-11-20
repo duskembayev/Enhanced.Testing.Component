@@ -81,3 +81,36 @@ later. Names are quoted, must be at most 63 bytes (PostgreSQL's identifier limit
 
 Databases live as long as the container, so drop per-test databases with `DropDatabaseAsync` when a test finishes if
 the container is shared by many tests. `CreateTemplateAsync` drops and re-creates a template with the same name.
+
+## A database per component
+
+When the application itself should work with a clean database, add a `PostgreSqlDatabaseHarness` to the component.
+It creates a database in the shared container when the component starts, passes its connection string to the
+application, and drops it when the component stops. It fits a
+[`ComponentEnvironment`](https://github.com/duskembayev/Enhanced.Testing.Component/blob/main/src/Enhanced.Testing.Component/README.md#a-fresh-application-per-test)
+that shares the container between per-test components:
+
+```csharp
+var orders = new PostgreSqlDatabaseHarness(fixture.PostgreSql)
+{
+    ConnectionName = "Orders",
+    Template = "orders_template"
+};
+
+await using var component = await fixture.Environment
+                                         .CreateComponent<Program>()
+                                         .AddHarness(orders)
+                                         .AddHarness(http)
+                                         .StartAsync();
+```
+
+| Option | Default | |
+|---|---|---|
+| `ConnectionName` | none | Passes the database's connection string as `ConnectionStrings:{ConnectionName}`, overriding the one set by `PostgreSqlHarness` |
+| `Template` | none | The template database to copy; without it the database is empty |
+| `Database` | `test_<guid>`, new on every start | The database name; `CurrentDatabase` returns the one in use |
+
+`GetConnectionString()` returns the connection string to the test. The database is dropped when the component stops,
+even if its start was cancelled. If a database with a fixed `Database` name already exists, the start fails and that
+database is left untouched. In a component that also owns the
+`PostgreSqlHarness`, add the database harness after it.

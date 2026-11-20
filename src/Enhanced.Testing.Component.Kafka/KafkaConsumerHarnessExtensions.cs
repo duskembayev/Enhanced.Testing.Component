@@ -180,30 +180,6 @@ public static class KafkaConsumerHarnessExtensions
     }
 
     /// <summary>
-    ///     Seeks to the specified offset.
-    /// </summary>
-    /// <param name="consumer">
-    ///     The Kafka consumer.
-    /// </param>
-    /// <param name="offset">
-    ///     The offset to seek to.
-    /// </param>
-    /// <param name="millisecondsTimeout">
-    ///     The timeout to wait for the operation to complete.
-    /// </param>
-    /// <typeparam name="TKey">
-    ///     The message key type.
-    /// </typeparam>
-    /// <typeparam name="TValue">
-    ///     The message value type.
-    /// </typeparam>
-    public static void Seek<TKey, TValue>(this KafkaConsumerHarness<TKey, TValue> consumer, Offset offset,
-        int millisecondsTimeout = Timeout.Infinite)
-    {
-        consumer.Seek(offset, TimeSpan.FromMilliseconds(millisecondsTimeout));
-    }
-
-    /// <summary>
     ///     Seeks to the beginning of the topic.
     /// </summary>
     /// <param name="consumer">

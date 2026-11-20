@@ -76,21 +76,19 @@ public class KafkaProducerHarness<TKey, TValue> : Harness
     ///     The cancellation token.
     /// </param>
     /// <returns>
-    ///     A task that completes when the message is delivered.
+    ///     The delivery result.
     /// </returns>
-    public Task ProduceAsync(Message<TKey, TValue> message, CancellationToken cancellationToken = default)
+    public Task<DeliveryResult<TKey, TValue>> ProduceAsync(Message<TKey, TValue> message, CancellationToken cancellationToken = default)
     {
         ThrowIfComponentNotStarted();
         return _producer!.ProduceAsync(Topic, message, cancellationToken);
     }
 
     /// <inheritdoc />
-    protected override Task OnStart(CancellationToken cancellationToken)
+    protected override async Task OnStart(CancellationToken cancellationToken)
     {
-        _producer = KafkaProducerFactory.Create(_kafkaHarness.GetConnectionString(), Topic, KeySerializer,
-            ValueSerializer);
-
-        return Task.CompletedTask;
+        _producer = await KafkaProducerFactory.CreateAsync(_kafkaHarness.GetConnectionString(), Topic, KeySerializer,
+            ValueSerializer, cancellationToken).ConfigureAwait(false);
     }
 
     /// <inheritdoc />

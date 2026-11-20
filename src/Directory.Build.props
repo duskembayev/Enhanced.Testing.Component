@@ -5,6 +5,7 @@
     <IsPackable>true</IsPackable>
     <MinVerTagPrefix>v</MinVerTagPrefix>
     <MinVerAutoIncrement>minor</MinVerAutoIncrement>
+    <MinVerMinimumMajorMinor>2.0</MinVerMinimumMajorMinor>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <Authors>duskembayev</Authors>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
@@ -26,6 +27,7 @@
 
   <PropertyGroup Condition="'$(PackageValidationBaselineVersion)' != ''">
     <EnablePackageValidation>true</EnablePackageValidation>
+    <DisablePackageBaselineValidation Condition="$([System.Version]::Parse('$(PackageValidationBaselineVersion)').Major) &lt; $([System.Version]::Parse('$(MinVerMinimumMajorMinor)').Major)">true</DisablePackageBaselineValidation>
   </PropertyGroup>
 
   <ItemGroup>

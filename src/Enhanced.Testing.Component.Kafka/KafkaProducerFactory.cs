@@ -7,14 +7,6 @@ internal static class KafkaProducerFactory
     public static readonly TimeSpan FlushTimeout = TimeSpan.FromSeconds(10);
     private static readonly TimeSpan WarmUpTimeout = TimeSpan.FromSeconds(5);
 
-    public static IProducer<TKey, TValue> Create<TKey, TValue>(string bootstrapServers, string topic,
-        ISerializer<TKey>? keySerializer, ISerializer<TValue>? valueSerializer)
-    {
-        var producer = Build(bootstrapServers, keySerializer, valueSerializer);
-        WarmUp(producer, topic);
-        return producer;
-    }
-
     public static async Task<IProducer<TKey, TValue>> CreateAsync<TKey, TValue>(string bootstrapServers,
         string topic, ISerializer<TKey>? keySerializer, ISerializer<TValue>? valueSerializer,
         CancellationToken cancellationToken)

@@ -8,7 +8,7 @@ namespace Enhanced.Testing.Component;
 /// <typeparam name="TContainer">
 ///     The type of the container.
 /// </typeparam>
-public abstract class ContainerHarness<TContainer> : Harness, IConcurrentStartDependency
+public abstract class ContainerHarness<TContainer> : EnvironmentHarness, IConcurrentStartDependency
     where TContainer : IContainer
 {
     private TContainer? _container;

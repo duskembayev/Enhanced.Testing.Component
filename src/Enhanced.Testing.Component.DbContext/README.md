@@ -40,6 +40,12 @@ await peopleDb.ExecuteAsync(async db =>
 var exists = await peopleDb.ExecuteAsync(db => db.Persons.AnyAsync(p => p.Name == "Kelly"));
 ```
 
+Overloads whose action takes a `CancellationToken` pass on the token given to `ExecuteAsync`:
+
+```csharp
+var count = await peopleDb.ExecuteAsync((db, ct) => db.Persons.CountAsync(ct), cancellationToken);
+```
+
 `Execute` and `Execute<T>` are the synchronous versions.
 
 The harness works with any EF Core provider. For PostgreSQL, see also

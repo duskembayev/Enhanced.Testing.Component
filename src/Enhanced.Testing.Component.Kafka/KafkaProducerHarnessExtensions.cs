@@ -53,8 +53,10 @@ public static class KafkaProducerHarnessExtensions
     /// <typeparam name="TValue">
     ///     The message value type.
     /// </typeparam>
-    /// <returns></returns>
-    public static Task ProduceAsync<TKey, TValue>(this KafkaProducerHarness<TKey, TValue> producer, TKey key,
+    /// <returns>
+    ///     The delivery result.
+    /// </returns>
+    public static Task<DeliveryResult<TKey, TValue>> ProduceAsync<TKey, TValue>(this KafkaProducerHarness<TKey, TValue> producer, TKey key,
         TValue value,
         CancellationToken cancellationToken = default)
     {

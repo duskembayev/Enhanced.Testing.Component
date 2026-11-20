@@ -3,7 +3,8 @@ using Confluent.Kafka;
 namespace Enhanced.Testing.Component.Kafka;
 
 /// <summary>
-///     A Kafka consumer harness.
+///     A Kafka consumer harness. It reads every partition the topic has when the component starts, starting at the
+///     end of the topic. Partitions added later are not read.
 /// </summary>
 /// <typeparam name="TKey">
 ///     The message key type.
@@ -55,18 +56,47 @@ public class KafkaConsumerHarness<TKey, TValue> : Harness
     public IDeserializer<TValue>? ValueDeserializer { get; set; }
 
     /// <summary>
-    ///     Seek to the specified offset.
+    ///     Moves the position of every partition of the topic to the specified offset.
     /// </summary>
     /// <param name="offset">
-    ///     The offset to seek to.
+    ///     The offset to seek to: <see cref="Offset.Beginning" />, <see cref="Offset.End" />, or an absolute offset
+    ///     when the topic has a single partition.
     /// </param>
     /// <param name="timeout">
-    ///     The timeout to wait for the operation. An infinite timeout is limited to 30 seconds.
+    ///     The time to query the partition offsets for <see cref="Offset.Beginning" /> and <see cref="Offset.End" />.
+    ///     When <see langword="null" /> or infinite, 30 seconds are used.
     /// </param>
-    public void Seek(Offset offset, TimeSpan timeout)
+    /// <exception cref="InvalidOperationException">
+    ///     Thrown if <paramref name="offset" /> is absolute and the topic has several partitions; use
+    ///     <see cref="Seek(TopicPartitionOffset, TimeSpan?)" /> instead.
+    /// </exception>
+    /// <exception cref="NotSupportedException">
+    ///     Thrown if <paramref name="offset" /> is a special offset other than <see cref="Offset.Beginning" /> and
+    ///     <see cref="Offset.End" />.
+    /// </exception>
+    public void Seek(Offset offset, TimeSpan? timeout = null)
     {
         ThrowIfComponentNotStarted();
         _reader!.Seek(offset, timeout);
+    }
+
+    /// <summary>
+    ///     Moves the position of one partition to the specified offset, for example the one from a delivery result,
+    ///     and the other partitions to the end of the topic.
+    /// </summary>
+    /// <param name="position">
+    ///     The partition and offset to seek to.
+    /// </param>
+    /// <param name="timeout">
+    ///     The time to query the partition offsets. When <see langword="null" /> or infinite, 30 seconds are used.
+    /// </param>
+    /// <exception cref="ArgumentException">
+    ///     Thrown if <paramref name="position" /> is not in a partition of the consumed topic.
+    /// </exception>
+    public void Seek(TopicPartitionOffset position, TimeSpan? timeout = null)
+    {
+        ThrowIfComponentNotStarted();
+        _reader!.Seek(position, timeout);
     }
 
     /// <summary>
@@ -119,7 +149,7 @@ public class KafkaConsumerHarness<TKey, TValue> : Harness
     /// </summary>
     /// <remarks>
     ///     Messages are read from the current position: the end of the topic when the harness starts, or the offset set
-    ///     by <see cref="Seek" />. Matching on a unique key or value keeps the test independent of messages produced by
+    ///     by <see cref="Seek(Offset, TimeSpan?)" />. Matching on a unique key or value keeps the test independent of messages produced by
     ///     earlier tests.
     /// </remarks>
     /// <param name="predicate">
