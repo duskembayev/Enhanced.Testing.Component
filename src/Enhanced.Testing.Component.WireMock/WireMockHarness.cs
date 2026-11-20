@@ -22,6 +22,12 @@ public class WireMockHarness : Harness
     public string? ConfigurationKey { get; init; }
 
     /// <summary>
+    ///     Makes the server listen over HTTP/2 instead of HTTP/1.1, which gRPC needs. Such a server does not answer
+    ///     HTTP/1.1 requests: use a separate harness for the HTTP APIs the application calls.
+    /// </summary>
+    public bool UseHttp2 { get; init; }
+
+    /// <summary>
     ///     Customizes the server settings before the server is started. By default, the server listens over HTTP on a
     ///     free dynamic port and the admin interface is disabled.
     /// </summary>
@@ -98,7 +104,7 @@ public class WireMockHarness : Harness
     {
         cancellationToken.ThrowIfCancellationRequested();
 
-        var settings = new WireMockServerSettings { StartAdminInterface = false };
+        var settings = new WireMockServerSettings { StartAdminInterface = false, UseHttp2 = UseHttp2 };
         ConfigureServer?.Invoke(settings);
         _server = WireMockServer.Start(settings);
         return Task.CompletedTask;

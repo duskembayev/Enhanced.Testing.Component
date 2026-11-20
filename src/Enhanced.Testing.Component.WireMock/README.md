@@ -42,5 +42,31 @@ Assert.Single(quotesApi.Server.LogEntries);
 - `BaseAddress` and `CreateClient()` give the test the server's address or an `HttpClient` for it.
 - `ConfigureServer` customizes the `WireMockServerSettings` before the server starts.
 
+## Faking a gRPC service
+
+The same harness fakes a gRPC service the application calls. Set `UseHttp2`, and describe calls and responses with
+the generated message types:
+
+```csharp
+var greeter = new WireMockHarness { ConfigurationKey = "Greeter:Address", UseHttp2 = true };
+```
+
+```csharp
+greeter.Server
+       .Given(Request.Create()
+                     .UsingGrpc(Greeter.Descriptor, "SayHello")
+                     .WithGrpcMessage<HelloRequest>(request => request.Name == "world"))
+       .RespondWith(Response.Create().WithGrpcMessage(new HelloReply { Message = "Hello, world" }));
+```
+
+- `UsingGrpc` takes the service descriptor from the generated code and a method name, or the full method name as a
+  string (`"greet.Greeter/SayHello"`).
+- `WithGrpcMessage<TRequest>(predicate)` matches the request message; leave it out to match every call of the method.
+- `WithGrpcMessage(message)` responds with a message, and `WithGrpcStatus(StatusCode.NotFound, "...")` fails the
+  call with a status.
+- A call that no stub matches fails on the client with the `Unimplemented` status.
+- The extensions cover unary calls, not streaming.
+- A server with `UseHttp2` does not answer HTTP/1.1 requests. Use one harness for gRPC and another for HTTP APIs.
+
 The package depends on `WireMock.Net.Minimal`. Add the full `WireMock.Net` package if you need its extra matchers
 (GraphQL, ProtoBuf).
