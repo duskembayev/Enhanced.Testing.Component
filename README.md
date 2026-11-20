@@ -1,7 +1,8 @@
 <h1 align="center">Enhanced.Testing.Component</h1>
 
 <p align="center">
-  Component tests for ASP.NET Core with real dependencies: PostgreSQL, Kafka, Redis and more, in a few lines of code.
+  Integration (component) tests for ASP.NET Core with real dependencies: PostgreSQL, Kafka, Redis and more, in a few
+  lines of code.
 </p>
 
 <p align="center">
@@ -10,6 +11,11 @@
   <a href="https://github.com/duskembayev/Enhanced.Testing.Component/blob/main/LICENSE"><img src="https://img.shields.io/github/license/duskembayev/Enhanced.Testing.Component" alt="License" /></a>
   <img src="https://img.shields.io/badge/.NET-8%20%7C%209%20%7C%2010%20%7C%2011-512BD4" alt=".NET 8 | 9 | 10 | 11" />
 </p>
+
+Enhanced.Testing.Component runs your ASP.NET Core application in memory with `WebApplicationFactory` and starts the
+dependencies it needs in Docker with [Testcontainers](https://dotnet.testcontainers.org/). A test calls the real
+application over HTTP or gRPC and checks what it wrote to a real database, topic or cache. Such tests are known as
+integration tests or component tests; the library replaces the fixture code that every project writes around them.
 
 ## Why
 

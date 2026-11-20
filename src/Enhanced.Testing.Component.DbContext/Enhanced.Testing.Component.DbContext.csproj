@@ -1,5 +1,10 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
+  <PropertyGroup>
+    <PackageTags>$(PackageTags);efcore;entity-framework-core;dbcontext</PackageTags>
+    <PackageDescription>EF Core schema creation and access to the application's database for integration (component) tests of ASP.NET Core applications. Part of Enhanced.Testing.Component.</PackageDescription>
+  </PropertyGroup>
+
     <ItemGroup>
       <ProjectReference Include="..\Enhanced.Testing.Component\Enhanced.Testing.Component.csproj" />
     </ItemGroup>
