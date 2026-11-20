@@ -13,6 +13,9 @@ namespace Enhanced.Testing.Component.WireMock;
 /// </remarks>
 public class WireMockHarness : Harness
 {
+    private readonly string _endpointName = "http";
+    private readonly string? _serviceName;
+    private bool _explainsGrpcCalls;
     private WireMockServer? _server;
 
     /// <summary>
@@ -20,6 +23,55 @@ public class WireMockHarness : Harness
     ///     If <see langword="null" />, the URL is not added to the configuration.
     /// </summary>
     public string? ConfigurationKey { get; init; }
+
+    /// <summary>
+    ///     The name under which the application finds the server through service discovery
+    ///     (<c>Microsoft.Extensions.ServiceDiscovery</c>), for example <c>payments</c> for a client that calls
+    ///     <c>http://payments</c>. The server address is passed to the application as
+    ///     <c>Services:{ServiceName}:{EndpointName}:0</c>. If <see langword="null" />, the server is not registered
+    ///     for service discovery.
+    /// </summary>
+    /// <exception cref="ArgumentException">
+    ///     Thrown if the value is empty.
+    /// </exception>
+    public string? ServiceName
+    {
+        get => _serviceName;
+        init
+        {
+            if (value is not null)
+            {
+                ArgumentException.ThrowIfNullOrWhiteSpace(value, nameof(ServiceName));
+            }
+
+            _serviceName = value;
+        }
+    }
+
+    /// <summary>
+    ///     The endpoint of the service the server stands for. The default, <c>http</c>, is the endpoint a client
+    ///     resolves for an address without an endpoint name, such as <c>http://payments</c> or
+    ///     <c>https+http://payments</c>. Set it for a named endpoint: a client that calls
+    ///     <c>http://_grpc.payments</c> resolves the endpoint <c>grpc</c>.
+    /// </summary>
+    /// <exception cref="ArgumentException">
+    ///     Thrown if the value is empty.
+    /// </exception>
+    public string EndpointName
+    {
+        get => _endpointName;
+        init
+        {
+            ArgumentException.ThrowIfNullOrWhiteSpace(value, nameof(EndpointName));
+            _endpointName = value;
+        }
+    }
+
+    /// <summary>
+    ///     Makes the server listen over HTTP/2 instead of HTTP/1.1, which gRPC needs. Such a server does not answer
+    ///     HTTP/1.1 requests: use a separate harness for the HTTP APIs the application calls.
+    /// </summary>
+    public bool UseHttp2 { get; init; }
 
     /// <summary>
     ///     Customizes the server settings before the server is started. By default, the server listens over HTTP on a
@@ -74,7 +126,19 @@ public class WireMockHarness : Harness
     /// <exception cref="InvalidOperationException">
     ///     Thrown if the component is not started or the server is not running.
     /// </exception>
-    public void Reset() => Server.Reset();
+    public void Reset()
+    {
+        Server.Reset();
+        ExplainUnmatchedGrpcCalls();
+    }
+
+    private void ExplainUnmatchedGrpcCalls()
+    {
+        if (_explainsGrpcCalls && _server is not null)
+        {
+            GrpcUnmatchedCalls.Explain(_server);
+        }
+    }
 
     /// <inheritdoc />
     /// <exception cref="InvalidOperationException">
@@ -82,15 +146,26 @@ public class WireMockHarness : Harness
     /// </exception>
     public override void OnConfigure(IWebHostBuilder builder)
     {
-        if (ConfigurationKey is null)
+        var serviceKey = ServiceName is null ? null : $"Services:{ServiceName}:{EndpointName}:0";
+
+        if (ConfigurationKey is null && serviceKey is null)
         {
             return;
         }
 
         var url = _server?.Url ?? throw new InvalidOperationException(
-            $"The WireMock server must be started before the web host is configured with '{ConfigurationKey}'.");
+            "The WireMock server must be started before the web host is configured with " +
+            $"'{ConfigurationKey ?? serviceKey}'.");
 
-        builder.UseSetting(ConfigurationKey, url);
+        if (ConfigurationKey is not null)
+        {
+            builder.UseSetting(ConfigurationKey, url);
+        }
+
+        if (serviceKey is not null)
+        {
+            builder.UseSetting(serviceKey, url);
+        }
     }
 
     /// <inheritdoc />
@@ -98,9 +173,11 @@ public class WireMockHarness : Harness
     {
         cancellationToken.ThrowIfCancellationRequested();
 
-        var settings = new WireMockServerSettings { StartAdminInterface = false };
+        var settings = new WireMockServerSettings { StartAdminInterface = false, UseHttp2 = UseHttp2 };
         ConfigureServer?.Invoke(settings);
         _server = WireMockServer.Start(settings);
+        _explainsGrpcCalls = settings.UseHttp2 == true;
+        ExplainUnmatchedGrpcCalls();
         return Task.CompletedTask;
     }
 

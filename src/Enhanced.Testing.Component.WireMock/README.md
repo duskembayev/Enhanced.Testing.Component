@@ -42,5 +42,54 @@ Assert.Single(quotesApi.Server.LogEntries);
 - `BaseAddress` and `CreateClient()` give the test the server's address or an `HttpClient` for it.
 - `ConfigureServer` customizes the `WireMockServerSettings` before the server starts.
 
+## Service discovery
+
+An application that finds its dependencies by name with `Microsoft.Extensions.ServiceDiscovery` needs no extra
+configuration key. Give the harness the service name, and it registers the server as that service:
+
+```csharp
+var payments = new WireMockHarness { ServiceName = "payments" };
+var greeter = new WireMockHarness { ServiceName = "greeter", EndpointName = "grpc", UseHttp2 = true };
+```
+
+| The application calls | Harness |
+|---|---|
+| `http://payments` or `https+http://payments` | `ServiceName = "payments"` |
+| `http://_api.payments` (a named endpoint) | `ServiceName = "payments", EndpointName = "api"` |
+
+The address is passed to the application as `Services:{ServiceName}:{EndpointName}:0`; `EndpointName` is `http`
+unless set. The server speaks plain HTTP, so a client fixed to `https://payments` cannot be pointed at it. Endpoints
+of the same service listed in the application's own configuration are not removed.
+
+## Faking a gRPC service
+
+The same harness fakes a gRPC service the application calls. Set `UseHttp2`, and describe calls and responses with
+the generated message types:
+
+```csharp
+var greeter = new WireMockHarness { ConfigurationKey = "Greeter:Address", UseHttp2 = true };
+```
+
+```csharp
+greeter.Server
+       .Given(Request.Create()
+                     .UsingGrpc(Greeter.Descriptor, nameof(Greeter.GreeterClient.SayHelloAsync))
+                     .WithGrpcMessage<HelloRequest>(request => request.Name == "world"))
+       .RespondWith(Response.Create().WithGrpcMessage(new HelloReply { Message = "Hello, world" }));
+```
+
+- `UsingGrpc(service, method)` takes the service descriptor from the generated code and a method name. Name the
+  method with `nameof` on the generated client, so a wrong name does not compile. Without generated code, pass the
+  full method name as a string: `UsingGrpc("greet.Greeter/SayHello")`.
+- `WithGrpcMessage<TRequest>(predicate)` matches the request message; leave it out to match every call of the method.
+- `WithGrpcMessage(message)` responds with a message, and `WithGrpcStatus(StatusCode.NotFound, "...")` fails the
+  call with a status.
+- A call that no stub matches fails on the client with the `Unimplemented` status. The status detail tells whether
+  the method has stubs and shows the request message, for example
+  `the request did not satisfy the 1 stub(s) of this method. Request: { "name": "someone else" }`.
+- A stub whose message type is not the one the method takes throws when it is created, instead of never matching.
+- The extensions cover unary calls, not streaming.
+- A server with `UseHttp2` does not answer HTTP/1.1 requests. Use one harness for gRPC and another for HTTP APIs.
+
 The package depends on `WireMock.Net.Minimal`. Add the full `WireMock.Net` package if you need its extra matchers
 (GraphQL, ProtoBuf).
