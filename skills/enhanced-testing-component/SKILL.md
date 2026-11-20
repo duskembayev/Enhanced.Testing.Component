@@ -41,7 +41,10 @@ older version, suggest upgrading or check the API in the installed package's XML
 3. Find how the app reads each dependency's address (`ConnectionStrings:X`, `builder.Configuration["X"]`) and use that
    name in the harness (`ConnectionName = "X"` for containers, `ConfigurationKey = "X"` for WireMock). Don't add
    test-only code to the app.
-4. Write one fixture per test class (or collection) and keep it running for all its tests.
+4. Write one fixture for the test project and share it between all test classes through a collection
+   (`ICollectionFixture<T>`). `IClassFixture<T>` starts new containers and a new application for every test class,
+   also when it is put on the collection definition; use it only for a single class that needs its own application
+   settings.
 
 ```csharp
 public class OrdersFixture : IAsyncLifetime
@@ -70,7 +73,11 @@ public class OrdersFixture : IAsyncLifetime
     public Task DisposeAsync() => _component.StopAsync(CancellationToken.None);
 }
 
-public class OrdersTests(OrdersFixture fixture) : IClassFixture<OrdersFixture>
+[CollectionDefinition("Orders")]
+public class OrdersCollection : ICollectionFixture<OrdersFixture>;
+
+[Collection("Orders")]
+public class OrdersTests(OrdersFixture fixture)
 {
     [Fact]
     public async Task ShouldStoreOrder()
@@ -83,8 +90,9 @@ public class OrdersTests(OrdersFixture fixture) : IClassFixture<OrdersFixture>
 }
 ```
 
-This is the xUnit v2 shape; in xUnit v3 `InitializeAsync`/`DisposeAsync` return `ValueTask`. For other frameworks,
-call `StartAsync`/`StopAsync` from the class or assembly setup and teardown.
+This is the xUnit v2 shape; in xUnit v3 `InitializeAsync`/`DisposeAsync` return `ValueTask`, and
+`[assembly: AssemblyFixture(typeof(OrdersFixture))]` shares the fixture without a collection. For other frameworks,
+call `StartAsync`/`StopAsync` from the assembly setup and teardown.
 
 More templates (Kafka, Redis, WireMock, time, gRPC): [references/templates.md](references/templates.md).
 
@@ -94,7 +102,7 @@ More templates (Kafka, Redis, WireMock, time, gRPC): [references/templates.md](r
   `PostgreSqlHarness`, Kafka consumer/producer after the broker, `RedisDatabaseHarness` after the Redis harness).
   Containers start first and in parallel regardless of order; a container that needs another harness during its own
   start must set `StartConcurrently = false`.
-- **Share containers, isolate data.** Don't start a component per test. Give tests their own data: a PostgreSQL
+- **Share containers, isolate data.** Don't start a component per test or per test class. Give tests their own data: a PostgreSQL
   database copied from a template (`CreateTemplateAsync` once, `CreateDatabaseAsync` per test), a Kafka topic per test
   (`CreateUniqueTopicAsync`), a Redis database or key prefix per fixture (`DefaultDatabase`, `KeyPrefix`,
   `FlushAsync`).
@@ -105,6 +113,17 @@ More templates (Kafka, Redis, WireMock, time, gRPC): [references/templates.md](r
   app and use `TimeProviderHarness` + `Advance(...)` in tests.
 - **Fake external HTTP APIs** with `WireMockHarness`; call `Reset()` between tests that share it.
 - **Remove background work the test doesn't need** with `ComponentBuilder.Create<Program>().RemoveHostedService<T>()`.
+- **Don't rely on a fresh application.** Tests share the app and everything registered in it: use unique ids per
+  test, reset mocks and `WireMockHarness` before a test that configures or counts calls, and never assume an empty
+  topic, table or cache.
+- **Override app settings with `UseSetting`**: `.Configure(b => b.UseSetting("Key", "value"))`. Values added through
+  `ConfigureAppConfiguration` arrive too late for code in `Program.cs` that reads `builder.Configuration` while it
+  registers services.
+- **Let the app's Kafka consumers read from the beginning** (`AutoOffsetReset=Earliest` through the configuration key
+  the app's consumer uses) instead of waiting after the start; with the default `Latest` a message produced before
+  the consumer gets its partitions is lost.
+- **To check that nothing happened**, send a sentinel message after the tested one and wait for the sentinel's
+  result instead of waiting a fixed time.
 - **Use the defaults for speed.** Containers start in parallel, Kafka uses `apache/kafka-native`, PostgreSQL and Redis
   run without durability. Only set `Durable = true` when a test needs persistence or mounts its own data volume.
 - **Customize containers through the harness**, not by subclassing: `Image = "<image>:<tag>"` (each container
@@ -113,7 +132,8 @@ More templates (Kafka, Redis, WireMock, time, gRPC): [references/templates.md](r
 ## When something fails
 
 See [references/troubleshooting.md](references/troubleshooting.md) for error messages and their fixes (Docker not
-running, `Program` inaccessible, "Component not started.", Kafka timeouts, template database errors, flaky tests).
+running, `Program` inaccessible, "Component not started.", Kafka timeouts, template database errors, flaky tests,
+an application that stopped mid-run, slow test projects).
 
 ## API reference (XML docs)
 
@@ -157,4 +177,5 @@ Each package README is the authoritative reference for its API and options:
 Guides: [lifecycle](https://github.com/duskembayev/Enhanced.Testing.Component/blob/main/docs/lifecycle.md),
 [test isolation](https://github.com/duskembayev/Enhanced.Testing.Component/blob/main/docs/test-isolation.md),
 [fast tests](https://github.com/duskembayev/Enhanced.Testing.Component/blob/main/docs/fast-tests.md),
+[common pitfalls](https://github.com/duskembayev/Enhanced.Testing.Component/blob/main/docs/pitfalls.md),
 [custom harnesses](https://github.com/duskembayev/Enhanced.Testing.Component/blob/main/docs/custom-harnesses.md).

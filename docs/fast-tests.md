@@ -16,8 +16,10 @@ what the library does by default and what you can do on top.
 
 1. **Measure first.** Run tests with `dotnet test --logger trx` and look at where the time goes: container startup,
    image pulls on CI, application startup, or waiting inside tests.
-2. **Start containers once.** Share a component per test class or collection instead of per test, and isolate tests
-   through their data. See [Test isolation](test-isolation.md).
+2. **Start containers once.** Share one component between test classes (an xUnit collection fixture) instead of
+   starting one per test or per test class, and isolate tests through their data. See
+   [Sharing a component between tests](lifecycle.md#sharing-a-component-between-tests) and
+   [Test isolation](test-isolation.md).
 3. **Copy databases instead of creating them.** Build the schema and seed data once in a PostgreSQL template database
    and copy it for each test in milliseconds.
 4. **Never sleep.** Replace `Task.Delay` and fixed timeouts with waiting for a condition. For Kafka, wait for your

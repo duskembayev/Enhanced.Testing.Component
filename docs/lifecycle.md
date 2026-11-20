@@ -48,6 +48,41 @@ var component = ComponentBuilder.Create<Program>()
 
 ## Sharing a component between tests
 
-Starting containers is the slowest part of a test run, so start a component once per test class or collection (for
-example, in an xUnit class fixture) and keep tests independent through their data. See
-[Test isolation](test-isolation.md).
+Starting containers and the application is the slowest part of a test run, so start one component for all the test
+classes that can share it and keep tests independent through their data. See [Test isolation](test-isolation.md).
+
+In xUnit, the way a fixture is declared decides how often it starts:
+
+| Declaration | The fixture starts |
+|---|---|
+| `ICollectionFixture<T>` on a collection definition | once for all test classes in the collection |
+| `IClassFixture<T>` on a test class | once for that test class |
+| `IClassFixture<T>` on a collection definition | once for **every** test class in the collection |
+| `[assembly: AssemblyFixture(typeof(T))]` (xUnit v3) | once for the test assembly |
+
+```csharp
+[CollectionDefinition("Orders")]
+public class OrdersCollection : ICollectionFixture<OrdersFixture>;
+
+[Collection("Orders")]
+public class CreateOrderTests(OrdersFixture fixture)
+{
+}
+
+[Collection("Orders")]
+public class CancelOrderTests(OrdersFixture fixture)
+{
+}
+```
+
+A class fixture suits a project with a single test class, or a class that needs an application with its own
+settings. In a project with many test classes it starts new containers and a new application for each of them, which
+can easily take most of the run time.
+
+Test classes in one collection run one after another. Classes in different collections run in parallel, each with its
+own fixture, so a few separate fixtures can be faster than one shared fixture when the tests themselves are slow.
+Measure before choosing: in the output of `dotnet test --logger trx`, a gap of several seconds between two test
+classes is a fixture starting.
+
+Tests that share a component also share the application's state and everything registered in it. See
+[Common pitfalls](pitfalls.md).

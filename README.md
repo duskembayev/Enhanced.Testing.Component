@@ -50,7 +50,11 @@ public class OrdersFixture : IAsyncLifetime
     public Task DisposeAsync() => _component.StopAsync(CancellationToken.None);
 }
 
-public class OrdersTests(OrdersFixture fixture) : IClassFixture<OrdersFixture>
+[CollectionDefinition("Orders")]
+public class OrdersCollection : ICollectionFixture<OrdersFixture>;
+
+[Collection("Orders")]
+public class OrdersTests(OrdersFixture fixture)
 {
     [Fact]
     public async Task ShouldCreateOrder()
@@ -61,6 +65,10 @@ public class OrdersTests(OrdersFixture fixture) : IClassFixture<OrdersFixture>
     }
 }
 ```
+
+The collection starts the fixture once for all test classes marked with `[Collection("Orders")]`. With
+`IClassFixture<OrdersFixture>` every test class would start its own containers and application; see
+[Sharing a component between tests](https://github.com/duskembayev/Enhanced.Testing.Component/blob/main/docs/lifecycle.md#sharing-a-component-between-tests).
 
 The test project references the application project. `Program` must be visible to it: with top-level statements before
 .NET 10, add `<InternalsVisibleTo Include="MyApp.Tests" />` to the application project or declare
@@ -109,6 +117,7 @@ Each package has its own README with examples, which is also shown on nuget.org:
 - [Component lifecycle](https://github.com/duskembayev/Enhanced.Testing.Component/blob/main/docs/lifecycle.md): what happens on start and stop, and how to order harnesses.
 - [Test isolation](https://github.com/duskembayev/Enhanced.Testing.Component/blob/main/docs/test-isolation.md): sharing containers between tests while keeping their data apart.
 - [Fast component tests](https://github.com/duskembayev/Enhanced.Testing.Component/blob/main/docs/fast-tests.md): what makes component tests slow and how to speed them up.
+- [Common pitfalls](https://github.com/duskembayev/Enhanced.Testing.Component/blob/main/docs/pitfalls.md): a fixture per test class, lost Kafka messages, ignored settings, an application that stops mid-run.
 - [Writing a custom harness](https://github.com/duskembayev/Enhanced.Testing.Component/blob/main/docs/custom-harnesses.md): plugging in a dependency the library doesn't cover.
 
 ## Using with AI coding agents

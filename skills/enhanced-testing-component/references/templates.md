@@ -3,6 +3,14 @@
 Fixtures below use xUnit v2 (`IAsyncLifetime` returning `Task`) and C# 12. Adapt names to the application: the
 `ConnectionName`/`ConfigurationKey` values must match what the application reads from configuration.
 
+Every template shares its fixture through one collection definition per test project, so the containers and the
+application start once for all test classes:
+
+```csharp
+[CollectionDefinition("Orders")]
+public class OrdersCollection : ICollectionFixture<OrdersFixture>;
+```
+
 Namespaces: `Enhanced.Testing.Component` plus the package's own (`Enhanced.Testing.Component.Kafka`,
 `.PostgreSql`, `.DbContext`, `.Redis`, `.WireMock`, `.Time`, `.GrpcClient`), `System.Net.Http.Json` for
 `PostAsJsonAsync`, `Microsoft.EntityFrameworkCore` for EF Core queries, and `WireMock.RequestBuilders` and
@@ -37,7 +45,8 @@ public class OrdersFixture : IAsyncLifetime
     public Task DisposeAsync() => _component.StopAsync(CancellationToken.None);
 }
 
-public class OrdersTests(OrdersFixture fixture) : IClassFixture<OrdersFixture>
+[Collection("Orders")]
+public class OrdersTests(OrdersFixture fixture)
 {
     [Fact]
     public async Task ShouldPublishOrderCreated()

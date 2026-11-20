@@ -26,6 +26,7 @@ Each package ships XML documentation next to its assembly (`<NuGet packages fold
 - [Component lifecycle](https://raw.githubusercontent.com/duskembayev/Enhanced.Testing.Component/main/docs/lifecycle.md)
 - [Test isolation](https://raw.githubusercontent.com/duskembayev/Enhanced.Testing.Component/main/docs/test-isolation.md)
 - [Fast component tests](https://raw.githubusercontent.com/duskembayev/Enhanced.Testing.Component/main/docs/fast-tests.md)
+- [Common pitfalls](https://raw.githubusercontent.com/duskembayev/Enhanced.Testing.Component/main/docs/pitfalls.md)
 - [Writing a custom harness](https://raw.githubusercontent.com/duskembayev/Enhanced.Testing.Component/main/docs/custom-harnesses.md)
 
 ## Optional
