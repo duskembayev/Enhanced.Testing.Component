@@ -62,6 +62,46 @@ public static class KafkaHarnessExtensions
     }
 
     /// <summary>
+    ///     Waits until the consumer group has all partitions of the topic assigned, so that the application's
+    ///     consumer is ready to receive messages.
+    /// </summary>
+    /// <remarks>
+    ///     Use it for an application whose consumer starts from the latest offset: a message produced before the
+    ///     consumer has its partitions is not delivered to it. The group must be stable in two checks in a row, which
+    ///     gives the consumer a moment to find its position after the assignment. If the application may read from the
+    ///     beginning in tests, setting its <c>auto.offset.reset</c> to <c>earliest</c> is simpler and needs no waiting.
+    /// </remarks>
+    /// <param name="broker">
+    ///     The broker harness.
+    /// </param>
+    /// <param name="groupId">
+    ///     The consumer group of the application (<c>group.id</c>).
+    /// </param>
+    /// <param name="topic">
+    ///     The topic the application consumes.
+    /// </param>
+    /// <param name="timeout">
+    ///     The maximum time to wait.
+    /// </param>
+    /// <param name="cancellationToken">
+    ///     The cancellation token.
+    /// </param>
+    /// <exception cref="TimeoutException">
+    ///     Thrown when the group does not have the partitions assigned within <paramref name="timeout" />. The message
+    ///     tells the last state of the group.
+    /// </exception>
+    public static Task WaitForAssignmentAsync(this IKafkaHarness broker, string groupId, string topic,
+        TimeSpan timeout, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(broker);
+        ArgumentException.ThrowIfNullOrEmpty(groupId);
+        ArgumentException.ThrowIfNullOrEmpty(topic);
+
+        return KafkaTopicAdmin.WaitForAssignmentAsync(broker.GetConnectionString(), groupId, topic, timeout,
+            cancellationToken);
+    }
+
+    /// <summary>
     ///     Creates a consumer of the topic, positioned at the end of the topic.
     /// </summary>
     /// <remarks>

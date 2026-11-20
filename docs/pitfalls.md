@@ -32,6 +32,16 @@ matters only for a consumer group without committed offsets, which is the case i
 own consumers (`KafkaConsumerHarness`, `CreateConsumerAsync`) start at the end of the topic and are ready when the
 component has started.
 
+Some applications read from the end on purpose, and the tests should cover them as they run in production. Keep the
+setting then and wait for the application's consumer group before producing:
+
+```csharp
+await fixture.Kafka.WaitForAssignmentAsync("orders-service", "orders", TimeSpan.FromSeconds(30));
+```
+
+It returns when the group has every partition of the topic assigned, and throws a `TimeoutException` that tells the
+state of the group otherwise.
+
 ## Checking that nothing happened
 
 **Symptom:** a test waits a few seconds and then asserts that no message arrived or no row was written. It is slow,

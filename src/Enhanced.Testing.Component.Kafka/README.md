@@ -66,6 +66,22 @@ Use it to assert that something was *not* produced, once you know the applicatio
 [Checking that nothing happened](https://github.com/duskembayev/Enhanced.Testing.Component/blob/main/docs/pitfalls.md#checking-that-nothing-happened)
 for how to know that without a fixed delay.
 
+## Waiting for the application's consumer
+
+An application whose consumer starts from the latest offset does not see a message produced before the consumer got
+its partitions. `WaitForAssignmentAsync` waits until the application's consumer group has every partition of the
+topic assigned:
+
+```csharp
+await kafka.WaitForAssignmentAsync("orders-service", "orders", TimeSpan.FromSeconds(30));
+
+await producer.ProduceAsync("order-42", "created");
+```
+
+Pass the application's `group.id`. If the application may read from the beginning in tests, setting its
+`auto.offset.reset` to `earliest` is simpler and needs no waiting; see
+[Common pitfalls](https://github.com/duskembayev/Enhanced.Testing.Component/blob/main/docs/pitfalls.md#the-application-misses-the-first-kafka-messages).
+
 ## A topic per test
 
 To let tests share one broker and still run in parallel, give each test its own topic. `CreateUniqueTopicAsync`

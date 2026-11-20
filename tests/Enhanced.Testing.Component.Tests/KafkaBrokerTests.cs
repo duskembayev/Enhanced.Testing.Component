@@ -286,6 +286,68 @@ public abstract class KafkaBrokerTests<TFixture>(TFixture fixture) : IClassFixtu
         Assert.Null(fixture.Consumer.Consume(TimeSpan.FromMilliseconds(200)));
     }
 
+    [Fact]
+    public async Task ShouldWaitUntilConsumerGroupIsAssigned()
+    {
+        var topic = await fixture.Broker.CreateUniqueTopicAsync("assignment");
+        var groupId = "group-" + Guid.NewGuid().ToString("N");
+        var received = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        using var stop = new CancellationTokenSource();
+
+        var application = Task.Run(() =>
+        {
+            using var consumer = new ConsumerBuilder<string, string>(new ConsumerConfig
+            {
+                BootstrapServers = fixture.Broker.GetConnectionString(),
+                GroupId = groupId,
+                AutoOffsetReset = AutoOffsetReset.Latest
+            }).Build();
+
+            consumer.Subscribe(topic);
+
+            try
+            {
+                while (true)
+                {
+                    received.TrySetResult(consumer.Consume(stop.Token).Message.Key);
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                consumer.Close();
+            }
+        });
+
+        try
+        {
+            await fixture.Broker.WaitForAssignmentAsync(groupId, topic, TimeSpan.FromSeconds(30));
+
+            using var producer = await fixture.Broker.CreateProducerAsync<string, string>(topic);
+            await producer.ProduceAsync("after-assignment", "value");
+
+            Assert.Equal("after-assignment", await received.Task.WaitAsync(MessageTimeout));
+        }
+        finally
+        {
+            await stop.CancelAsync();
+            await application;
+        }
+    }
+
+    [Fact]
+    public async Task ShouldFailWhenConsumerGroupIsNotAssigned()
+    {
+        var topic = await fixture.Broker.CreateUniqueTopicAsync("assignment");
+        var groupId = "missing-" + Guid.NewGuid().ToString("N");
+
+        var exception = await Assert.ThrowsAsync<TimeoutException>(
+            () => fixture.Broker.WaitForAssignmentAsync(groupId, topic, TimeSpan.FromSeconds(1)));
+
+        Assert.Contains(groupId, exception.Message);
+        Assert.Contains(topic, exception.Message);
+    }
+
     private async Task<string> RunIsolatedScenarioAsync(string value)
     {
         var topic = await fixture.Broker.CreateUniqueTopicAsync("isolated");
