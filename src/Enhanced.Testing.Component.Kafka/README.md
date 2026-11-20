@@ -51,6 +51,21 @@ var result = await consumer.WaitForMessageAsync(r => r.Message.Value.Contains("4
 Non-matching messages are skipped; a `TimeoutException` reports how many. `SeekToBeginning`/`SeekToEnd` move the
 position the wait starts from.
 
+## Checking what arrived so far
+
+`ReadToEndAsync` reads from the current position to the end of the topic and returns the messages. It does not wait
+for messages produced after the call, so it returns at once when nothing is left to read:
+
+```csharp
+var messages = await consumer.ReadToEndAsync();
+
+Assert.DoesNotContain(messages, r => r.Message.Key == "order-42");
+```
+
+Use it to assert that something was *not* produced, once you know the application has finished its work. See
+[Checking that nothing happened](https://github.com/duskembayev/Enhanced.Testing.Component/blob/main/docs/pitfalls.md#checking-that-nothing-happened)
+for how to know that without a fixed delay.
+
 ## A topic per test
 
 To let tests share one broker and still run in parallel, give each test its own topic. `CreateUniqueTopicAsync`

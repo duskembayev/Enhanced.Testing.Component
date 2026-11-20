@@ -61,6 +61,16 @@ Assert.False(ignoredOrderWasConfirmed);
 The order is guaranteed only within one partition, and only if the application handles a partition's messages one
 after another. Topics created by the harness have one partition.
 
+When the sentinel leaves its trace somewhere else, for example in a database row, wait for that trace and then read
+what the topic holds. `ReadToEndAsync` returns the messages up to the current end of the topic and does not wait for
+new ones:
+
+```csharp
+var confirmations = await fixture.Confirmations.ReadToEndAsync();
+
+Assert.DoesNotContain(confirmations, result => result.Message.Key == ignoredOrderId);
+```
+
 ## A setting from `ConfigureAppConfiguration` is ignored
 
 **Symptom:** the test sets a configuration value, and the application still uses the default.

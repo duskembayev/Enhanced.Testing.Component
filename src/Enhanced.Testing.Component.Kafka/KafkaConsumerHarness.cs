@@ -81,7 +81,7 @@ public class KafkaConsumerHarness<TKey, TValue> : Harness
     public ConsumeResult<TKey, TValue>? Consume(TimeSpan timeout)
     {
         ThrowIfComponentNotStarted();
-        return _reader!.Consumer.Consume(timeout);
+        return _reader!.Consume(timeout);
     }
 
     /// <summary>
@@ -96,7 +96,7 @@ public class KafkaConsumerHarness<TKey, TValue> : Harness
     public ConsumeResult<TKey, TValue>? Consume(CancellationToken cancellationToken)
     {
         ThrowIfComponentNotStarted();
-        return _reader!.Consumer.Consume(cancellationToken);
+        return _reader!.Consume(cancellationToken);
     }
 
     /// <summary>
@@ -111,7 +111,9 @@ public class KafkaConsumerHarness<TKey, TValue> : Harness
     public ConsumeResult<TKey, TValue>? Consume(int millisecondsTimeout = Timeout.Infinite)
     {
         ThrowIfComponentNotStarted();
-        return _reader!.Consumer.Consume(millisecondsTimeout);
+        return millisecondsTimeout == Timeout.Infinite
+            ? _reader!.Consume(CancellationToken.None)
+            : _reader!.Consume(TimeSpan.FromMilliseconds(millisecondsTimeout));
     }
 
     /// <summary>
@@ -142,6 +144,30 @@ public class KafkaConsumerHarness<TKey, TValue> : Harness
     {
         ThrowIfComponentNotStarted();
         return _reader!.WaitForMessageAsync(predicate, timeout, cancellationToken);
+    }
+
+    /// <summary>
+    ///     Reads the messages from the current position to the end of the topic and returns them. It does not wait for
+    ///     messages produced after the call.
+    /// </summary>
+    /// <remarks>
+    ///     Use it to check what the application produced so far, for example that nothing arrived, once you know the
+    ///     application has finished its work. When the position is already at the end, it returns an empty list at
+    ///     once.
+    /// </remarks>
+    /// <param name="cancellationToken">
+    ///     The cancellation token.
+    /// </param>
+    /// <returns>
+    ///     The messages in the order they were produced.
+    /// </returns>
+    /// <exception cref="TimeoutException">
+    ///     Thrown when the end of the topic is not reached within 30 seconds.
+    /// </exception>
+    public Task<IReadOnlyList<ConsumeResult<TKey, TValue>>> ReadToEndAsync(CancellationToken cancellationToken = default)
+    {
+        ThrowIfComponentNotStarted();
+        return _reader!.ReadToEndAsync(cancellationToken);
     }
 
     /// <inheritdoc />
