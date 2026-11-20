@@ -180,31 +180,7 @@ public static class KafkaConsumerHarnessExtensions
     }
 
     /// <summary>
-    ///     Seeks to the specified offset.
-    /// </summary>
-    /// <param name="consumer">
-    ///     The Kafka consumer.
-    /// </param>
-    /// <param name="offset">
-    ///     The offset to seek to.
-    /// </param>
-    /// <param name="millisecondsTimeout">
-    ///     The timeout to wait for the operation to complete.
-    /// </param>
-    /// <typeparam name="TKey">
-    ///     The message key type.
-    /// </typeparam>
-    /// <typeparam name="TValue">
-    ///     The message value type.
-    /// </typeparam>
-    public static void Seek<TKey, TValue>(this KafkaConsumerHarness<TKey, TValue> consumer, Offset offset,
-        int millisecondsTimeout = Timeout.Infinite)
-    {
-        consumer.Seek(offset, TimeSpan.FromMilliseconds(millisecondsTimeout));
-    }
-
-    /// <summary>
-    ///     Seeks to the beginning of the topic.
+    ///     Moves the position of every partition to the beginning of the topic.
     /// </summary>
     /// <param name="consumer">
     ///     The Kafka consumer.
@@ -216,10 +192,32 @@ public static class KafkaConsumerHarnessExtensions
     ///     The message value type.
     /// </typeparam>
     public static void SeekToBeginning<TKey, TValue>(this KafkaConsumerHarness<TKey, TValue> consumer) =>
-        consumer.Seek(Offset.Beginning);
+        consumer.Reader.SeekToBeginning();
 
     /// <summary>
-    ///     Seeks to the end of the topic.
+    ///     Moves the position of one partition to its beginning. The positions of the other partitions do not change.
+    /// </summary>
+    /// <param name="consumer">
+    ///     The Kafka consumer.
+    /// </param>
+    /// <param name="partition">
+    ///     The partition to move.
+    /// </param>
+    /// <typeparam name="TKey">
+    ///     The message key type.
+    /// </typeparam>
+    /// <typeparam name="TValue">
+    ///     The message value type.
+    /// </typeparam>
+    /// <exception cref="ArgumentException">
+    ///     Thrown if <paramref name="partition" /> is not a partition of the consumed topic.
+    /// </exception>
+    public static void SeekToBeginning<TKey, TValue>(this KafkaConsumerHarness<TKey, TValue> consumer,
+        TopicPartition partition) =>
+        consumer.Reader.SeekToBeginning(partition);
+
+    /// <summary>
+    ///     Moves the position of every partition to the end of the topic.
     /// </summary>
     /// <param name="consumer">
     ///     The Kafka consumer.
@@ -231,7 +229,29 @@ public static class KafkaConsumerHarnessExtensions
     ///     The message value type.
     /// </typeparam>
     public static void SeekToEnd<TKey, TValue>(this KafkaConsumerHarness<TKey, TValue> consumer) =>
-        consumer.Seek(Offset.End);
+        consumer.Reader.SeekToEnd();
+
+    /// <summary>
+    ///     Moves the position of one partition to its end. The positions of the other partitions do not change.
+    /// </summary>
+    /// <param name="consumer">
+    ///     The Kafka consumer.
+    /// </param>
+    /// <param name="partition">
+    ///     The partition to move.
+    /// </param>
+    /// <typeparam name="TKey">
+    ///     The message key type.
+    /// </typeparam>
+    /// <typeparam name="TValue">
+    ///     The message value type.
+    /// </typeparam>
+    /// <exception cref="ArgumentException">
+    ///     Thrown if <paramref name="partition" /> is not a partition of the consumed topic.
+    /// </exception>
+    public static void SeekToEnd<TKey, TValue>(this KafkaConsumerHarness<TKey, TValue> consumer,
+        TopicPartition partition) =>
+        consumer.Reader.SeekToEnd(partition);
 
     /// <summary>
     ///     Waits for a message with the specified key, skipping messages with other keys.

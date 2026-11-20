@@ -27,6 +27,21 @@ public class RedpandaHarness : ContainerHarness<RedpandaContainer>, IKafkaHarnes
     /// </summary>
     public IList<string> Topics { get; init; } = [];
 
+    /// <summary>
+    ///     The number of partitions of the topics in <see cref="Topics" />. When null, the broker's default is used,
+    ///     which is one partition unless the broker is configured otherwise.
+    /// </summary>
+    /// <exception cref="ArgumentOutOfRangeException">
+    ///     Thrown if the value is less than one.
+    /// </exception>
+    public int? TopicPartitions
+    {
+        get => _topicPartitions;
+        init => _topicPartitions = KafkaTopicAdmin.ValidatePartitions(value, nameof(TopicPartitions));
+    }
+
+    private readonly int? _topicPartitions;
+
     /// <inheritdoc />
     protected override async Task OnStart(CancellationToken cancellationToken)
     {
@@ -34,7 +49,7 @@ public class RedpandaHarness : ContainerHarness<RedpandaContainer>, IKafkaHarnes
 
         foreach (var topic in Topics)
         {
-            await KafkaTopicAdmin.EnsureTopicAsync(GetConnectionString(), topic, cancellationToken)
+            await KafkaTopicAdmin.EnsureTopicAsync(GetConnectionString(), topic, TopicPartitions, cancellationToken)
                                  .ConfigureAwait(false);
         }
     }
@@ -55,7 +70,7 @@ public class RedpandaHarness : ContainerHarness<RedpandaContainer>, IKafkaHarnes
     /// <inheritdoc />
     public async Task<bool> CreateTopicAsync(string topicName, CancellationToken cancellationToken = default)
     {
-        return await KafkaTopicAdmin.TryCreateTopicAsync(GetConnectionString(), topicName, cancellationToken)
+        return await KafkaTopicAdmin.TryCreateTopicAsync(GetConnectionString(), topicName, null, cancellationToken)
                                     .ConfigureAwait(false);
     }
 }

@@ -36,6 +36,94 @@ public static class KafkaHarnessExtensions
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(broker);
+
+        var topic = CreateUniqueTopicName(prefix);
+
+        if (!await broker.CreateTopicAsync(topic, cancellationToken).ConfigureAwait(false))
+        {
+            throw new InvalidOperationException($"Failed to create Kafka topic '{topic}'.");
+        }
+
+        return topic;
+    }
+
+    /// <summary>
+    ///     Creates a topic with a unique name and the specified number of partitions, and waits until its partitions
+    ///     have a leader.
+    /// </summary>
+    /// <param name="broker">
+    ///     The broker harness.
+    /// </param>
+    /// <param name="prefix">
+    ///     The topic name prefix. A unique suffix is appended to it. It may contain only ASCII letters, digits,
+    ///     <c>.</c>, <c>_</c> and <c>-</c>, and be at most 216 characters long.
+    /// </param>
+    /// <param name="partitions">
+    ///     The number of partitions.
+    /// </param>
+    /// <param name="cancellationToken">
+    ///     The cancellation token.
+    /// </param>
+    /// <returns>
+    ///     The name of the created topic.
+    /// </returns>
+    /// <exception cref="ArgumentException">
+    ///     Thrown when <paramref name="prefix" /> is empty, too long or contains characters not allowed in a topic name.
+    /// </exception>
+    /// <exception cref="ArgumentOutOfRangeException">
+    ///     Thrown when <paramref name="partitions" /> is less than one.
+    /// </exception>
+    /// <exception cref="InvalidOperationException">
+    ///     Thrown when the topic cannot be created.
+    /// </exception>
+    public static async Task<string> CreateUniqueTopicAsync(this IKafkaHarness broker, string prefix, int partitions,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(broker);
+
+        var topic = CreateUniqueTopicName(prefix);
+
+        if (!await broker.CreateTopicAsync(topic, partitions, cancellationToken).ConfigureAwait(false))
+        {
+            throw new InvalidOperationException($"Failed to create Kafka topic '{topic}'.");
+        }
+
+        return topic;
+    }
+
+    /// <summary>
+    ///     Creates a topic with the specified number of partitions and waits until its partitions have a leader.
+    /// </summary>
+    /// <param name="broker">
+    ///     The broker harness.
+    /// </param>
+    /// <param name="topicName">
+    ///     The topic name.
+    /// </param>
+    /// <param name="partitions">
+    ///     The number of partitions.
+    /// </param>
+    /// <param name="cancellationToken">
+    ///     The cancellation token.
+    /// </param>
+    /// <returns>
+    ///     Returns true if the topic was created; otherwise, false. A topic that already exists is left as is.
+    /// </returns>
+    /// <exception cref="ArgumentOutOfRangeException">
+    ///     Thrown when <paramref name="partitions" /> is less than one.
+    /// </exception>
+    public static Task<bool> CreateTopicAsync(this IKafkaHarness broker, string topicName, int partitions,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(broker);
+        ArgumentException.ThrowIfNullOrEmpty(topicName);
+        KafkaTopicAdmin.ValidatePartitions(partitions, nameof(partitions));
+
+        return KafkaTopicAdmin.TryCreateTopicAsync(broker.GetConnectionString(), topicName, partitions, cancellationToken);
+    }
+
+    private static string CreateUniqueTopicName(string prefix)
+    {
         ArgumentException.ThrowIfNullOrEmpty(prefix);
 
         if (prefix.Length > MaxTopicNameLength - UniqueSuffixLength)
@@ -51,23 +139,15 @@ public static class KafkaHarnessExtensions
                 "The prefix may contain only ASCII letters, digits, '.', '_' and '-'.", nameof(prefix));
         }
 
-        var topic = $"{prefix}-{Guid.NewGuid():N}";
-
-        if (!await broker.CreateTopicAsync(topic, cancellationToken).ConfigureAwait(false))
-        {
-            throw new InvalidOperationException($"Failed to create Kafka topic '{topic}'.");
-        }
-
-        return topic;
+        return $"{prefix}-{Guid.NewGuid():N}";
     }
 
     /// <summary>
     ///     Creates a consumer of the topic, positioned at the end of the topic.
     /// </summary>
     /// <remarks>
-    ///     The consumer reads partition 0 only, so the topic must have a single partition. Topics created by
-    ///     <see cref="CreateUniqueTopicAsync" /> get the broker's default partition count, which is 1 unless the
-    ///     broker is configured otherwise.
+    ///     The consumer reads every partition of the topic. Messages from different partitions are not ordered
+    ///     relative to each other.
     /// </remarks>
     /// <param name="broker">
     ///     The broker harness.

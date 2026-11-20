@@ -3,7 +3,8 @@ using Confluent.Kafka;
 namespace Enhanced.Testing.Component.Kafka;
 
 /// <summary>
-///     A Kafka consumer harness.
+///     A Kafka consumer harness. It reads every partition the topic has when the component starts, starting at the
+///     end of the topic. Partitions added later are not read.
 /// </summary>
 /// <typeparam name="TKey">
 ///     The message key type.
@@ -55,18 +56,26 @@ public class KafkaConsumerHarness<TKey, TValue> : Harness
     public IDeserializer<TValue>? ValueDeserializer { get; set; }
 
     /// <summary>
-    ///     Seek to the specified offset.
+    ///     Moves the position of one partition to the specified offset, for example the one from a consumed message.
+    ///     The positions of the other partitions do not change.
     /// </summary>
-    /// <param name="offset">
-    ///     The offset to seek to.
+    /// <param name="position">
+    ///     The partition and the offset to seek to: a message offset, <see cref="Offset.Beginning" /> or
+    ///     <see cref="Offset.End" />.
     /// </param>
-    /// <param name="timeout">
-    ///     The timeout to wait for the operation. An infinite timeout is limited to 30 seconds.
-    /// </param>
-    public void Seek(Offset offset, TimeSpan timeout)
+    /// <exception cref="ArgumentException">
+    ///     Thrown if <paramref name="position" /> is not in a partition of the consumed topic, or its offset is a
+    ///     special offset other than <see cref="Offset.Beginning" /> and <see cref="Offset.End" />.
+    /// </exception>
+    public void Seek(TopicPartitionOffset position) => Reader.Seek(position);
+
+    internal KafkaTopicReader<TKey, TValue> Reader
     {
-        ThrowIfComponentNotStarted();
-        _reader!.Seek(offset, timeout);
+        get
+        {
+            ThrowIfComponentNotStarted();
+            return _reader!;
+        }
     }
 
     /// <summary>
@@ -119,7 +128,7 @@ public class KafkaConsumerHarness<TKey, TValue> : Harness
     /// </summary>
     /// <remarks>
     ///     Messages are read from the current position: the end of the topic when the harness starts, or the offset set
-    ///     by <see cref="Seek" />. Matching on a unique key or value keeps the test independent of messages produced by
+    ///     by one of the seek methods. Matching on a unique key or value keeps the test independent of messages produced by
     ///     earlier tests.
     /// </remarks>
     /// <param name="predicate">

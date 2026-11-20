@@ -151,7 +151,7 @@ uses. Read it instead of decompiling or reflecting over the assemblies:
   Take the `tfm` folder closest to the test project's target framework (`net8.0`, `net9.0`, `net10.0`, `net11.0`).
 - Members are keyed by documentation IDs: `T:` types, `M:` methods, `P:` properties, for example
   `T:Enhanced.Testing.Component.Kafka.KafkaHarness` or
-  ``M:Enhanced.Testing.Component.Kafka.KafkaConsumerHarness`2.Seek(Confluent.Kafka.Offset,System.TimeSpan)``
+  ``M:Enhanced.Testing.Component.Kafka.KafkaConsumerHarness`2.Seek(Confluent.Kafka.TopicPartitionOffset)``
   (`` `2 `` marks a generic type with two type parameters). Search the file for the type name to see all its members:
 
 ```shell

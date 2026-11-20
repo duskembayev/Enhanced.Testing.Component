@@ -1,4 +1,6 @@
+using Confluent.Kafka;
 using Enhanced.Testing.Component;
+using Enhanced.Testing.Component.Kafka;
 using Enhanced.Testing.Component.PostgreSql;
 using Enhanced.Testing.Component.Redis;
 using Testcontainers.Redis;
@@ -110,6 +112,34 @@ public class ContainerConfigurationTests
             Assert.Equal("save", save.Stdout.Trim());
             Assert.Equal("maxmemory\n10485760", maxMemory.Stdout.Trim());
         });
+    }
+
+    [Fact]
+    public async Task ShouldCreateStartTopicsWithConfiguredPartitions()
+    {
+        const string topic = "orders";
+        var kafka = new KafkaHarness { Topics = [topic], TopicPartitions = 3 };
+
+        await RunAsync(kafka, async () =>
+        {
+            using var consumer = await kafka.CreateConsumerAsync<string, string>(topic);
+            using var producer = new ProducerBuilder<string, string>(
+                new ProducerConfig { BootstrapServers = kafka.GetConnectionString() }).Build();
+
+            await producer.ProduceAsync(new TopicPartition(topic, 2), new Message<string, string> { Key = "key", Value = "value" });
+
+            var message = await consumer.WaitForMessageAsync(_ => true, TimeSpan.FromSeconds(10));
+
+            Assert.Equal(2, message.Partition.Value);
+        });
+    }
+
+    [Fact]
+    public void ShouldRejectTopicPartitionsBelowOne()
+    {
+        Assert.Throws<ArgumentOutOfRangeException>(() => new KafkaHarness { TopicPartitions = 0 });
+        Assert.Throws<ArgumentOutOfRangeException>(() => new RedpandaHarness { TopicPartitions = -1 });
+        Assert.Null(new KafkaHarness().TopicPartitions);
     }
 
     private static async Task RunAsync(IHarness harness, Func<Task> assert)

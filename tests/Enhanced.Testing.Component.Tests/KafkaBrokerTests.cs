@@ -1,3 +1,4 @@
+using Confluent.Kafka;
 using Enhanced.Testing.Component;
 using Enhanced.Testing.Component.Kafka;
 using Microsoft.Extensions.Configuration;
@@ -202,6 +203,151 @@ public abstract class KafkaBrokerTests<TFixture>(TFixture fixture) : IClassFixtu
         Assert.Throws<ObjectDisposedException>(() => consumer.Consume(TimeSpan.Zero));
         await Assert.ThrowsAsync<ObjectDisposedException>(() => consumer.WaitForKeyAsync("key", MessageTimeout));
         await Assert.ThrowsAsync<ObjectDisposedException>(() => producer.ProduceAsync("key", "value"));
+    }
+
+    [Fact]
+    public async Task ShouldConsumeEveryPartition()
+    {
+        var topic = await fixture.Broker.CreateUniqueTopicAsync("partitions", 3);
+
+        using var producer = CreatePartitionProducer();
+        await ProduceAsync(producer, topic, 1, "earlier");
+
+        using var consumer = await fixture.Broker.CreateConsumerAsync<string, string>(topic);
+
+        await ProduceAsync(producer, topic, 2, "later");
+
+        var later = await consumer.WaitForMessageAsync(result => result.Message.Key == "later", MessageTimeout);
+        Assert.Equal(2, later.Partition.Value);
+
+        consumer.SeekToBeginning();
+
+        var earlier = await consumer.WaitForMessageAsync(result => result.Message.Key == "earlier", MessageTimeout);
+        Assert.Equal(1, earlier.Partition.Value);
+    }
+
+    [Fact]
+    public async Task ShouldSeekOnePartitionAndKeepTheOthers()
+    {
+        var topic = await fixture.Broker.CreateUniqueTopicAsync("seek-partition", 2);
+
+        using var producer = CreatePartitionProducer();
+        await ProduceAsync(producer, topic, 1, "before-consumer");
+
+        using var consumer = await fixture.Broker.CreateConsumerAsync<string, string>(topic);
+
+        var first = await ProduceAsync(producer, topic, 0, "first");
+        await ProduceAsync(producer, topic, 0, "second");
+        await ProduceAsync(producer, topic, 1, "other");
+
+        await ReadUntilAsync(consumer, "second", "other");
+
+        consumer.Seek(first.TopicPartitionOffset);
+        await ProduceAsync(producer, topic, 1, "marker");
+
+        Assert.Equal(["first", "marker", "second"], await ReadUntilAsync(consumer, "second", "marker"));
+
+        consumer.SeekToBeginning(new TopicPartition(topic, 1));
+        await ProduceAsync(producer, topic, 0, "third");
+
+        Assert.Equal(["before-consumer", "marker", "other", "third"],
+            await ReadUntilAsync(consumer, "marker", "third"));
+
+        await ProduceAsync(producer, topic, 0, "skipped");
+        consumer.SeekToEnd(new TopicPartition(topic, 0));
+        await ProduceAsync(producer, topic, 0, "last");
+
+        Assert.Equal(["last"], await ReadUntilAsync(consumer, "last"));
+    }
+
+    [Fact]
+    public async Task ShouldKeepPositionOfPartitionThatWasNotRead()
+    {
+        var topic = await fixture.Broker.CreateUniqueTopicAsync("seek-unread", 2);
+
+        using var producer = CreatePartitionProducer();
+        await ProduceAsync(producer, topic, 1, "before-consumer");
+
+        using var consumer = await fixture.Broker.CreateConsumerAsync<string, string>(topic);
+
+        consumer.SeekToBeginning(new TopicPartition(topic, 0));
+        await ProduceAsync(producer, topic, 0, "first");
+        await ProduceAsync(producer, topic, 1, "marker");
+
+        Assert.Equal(["first", "marker"], await ReadUntilAsync(consumer, "first", "marker"));
+    }
+
+    [Fact]
+    public async Task ShouldSeekHarnessConsumerToConsumedMessage()
+    {
+        var key = Guid.NewGuid().ToString("N");
+
+        await fixture.Producer.ProduceAsync(key, "replayed");
+        var consumed = await fixture.Consumer.WaitForMessageAsync(result => result.Message.Key == key, MessageTimeout);
+
+        fixture.Consumer.Seek(consumed.TopicPartitionOffset);
+
+        var replayed = await fixture.Consumer.WaitForMessageAsync(_ => true, MessageTimeout);
+        Assert.Equal(key, replayed.Message.Key);
+
+        fixture.Consumer.SeekToBeginning(consumed.TopicPartition);
+        Assert.Equal("replayed", (await fixture.Consumer.WaitForKeyAsync(key, MessageTimeout)).Value);
+
+        fixture.Consumer.SeekToEnd(consumed.TopicPartition);
+        Assert.Null(fixture.Consumer.Consume(TimeSpan.FromMilliseconds(200)));
+    }
+
+    [Fact]
+    public async Task ShouldRejectSeekOutsideTheTopic()
+    {
+        var topic = await fixture.Broker.CreateUniqueTopicAsync("seek-invalid");
+
+        using var consumer = await fixture.Broker.CreateConsumerAsync<string, string>(topic);
+
+        Assert.Throws<ArgumentException>(() => consumer.Seek(new TopicPartitionOffset("another-topic", 0, 0)));
+        Assert.Throws<ArgumentException>(() => consumer.Seek(new TopicPartitionOffset(topic, 1, 0)));
+        Assert.Throws<ArgumentException>(() => consumer.Seek(new TopicPartitionOffset(topic, 0, Offset.Stored)));
+        Assert.Throws<ArgumentException>(() => consumer.SeekToEnd(new TopicPartition(topic, 1)));
+        Assert.Throws<ArgumentException>(() =>
+            fixture.Consumer.SeekToBeginning(new TopicPartition(KafkaBrokerFixture.Topic, 1)));
+    }
+
+    [Fact]
+    public async Task ShouldCreateTopicWithPartitions()
+    {
+        var topic = "topic-" + Guid.NewGuid().ToString("N");
+
+        Assert.True(await fixture.Broker.CreateTopicAsync(topic, 3));
+        Assert.False(await fixture.Broker.CreateTopicAsync(topic, 3));
+        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() => fixture.Broker.CreateTopicAsync(topic, 0));
+
+        using var producer = CreatePartitionProducer();
+
+        Assert.Equal(2, (await ProduceAsync(producer, topic, 2, "key")).Partition.Value);
+    }
+
+    private IProducer<string, string> CreatePartitionProducer() =>
+        new ProducerBuilder<string, string>(
+            new ProducerConfig { BootstrapServers = fixture.Broker.GetConnectionString() }).Build();
+
+    private static Task<DeliveryResult<string, string>> ProduceAsync(IProducer<string, string> producer, string topic,
+        int partition, string key) =>
+        producer.ProduceAsync(new TopicPartition(topic, partition), new Message<string, string> { Key = key, Value = key });
+
+    private static async Task<string[]> ReadUntilAsync(KafkaTestConsumer<string, string> consumer,
+        params string[] expectedKeys)
+    {
+        var keys = new List<string>();
+
+        await consumer.WaitForMessageAsync(
+            result =>
+            {
+                keys.Add(result.Message.Key);
+                return expectedKeys.All(keys.Contains);
+            },
+            MessageTimeout);
+
+        return keys.Order().ToArray();
     }
 
     private async Task<string> RunIsolatedScenarioAsync(string value)
