@@ -1,6 +1,5 @@
 using System.Buffers.Binary;
 using System.Globalization;
-using System.Reflection;
 using Google.Protobuf;
 using Google.Protobuf.Reflection;
 using Grpc.Core;
@@ -42,30 +41,28 @@ public static class WireMockGrpcExtensions
 
     /// <summary>
     ///     Matches calls of a gRPC method of the service, named through the generated code:
-    ///     <c>UsingGrpc&lt;Greeter.GreeterClient&gt;(nameof(Greeter.GreeterClient.SayHelloAsync))</c>.
+    ///     <c>UsingGrpc(Greeter.Descriptor, nameof(Greeter.GreeterClient.SayHelloAsync))</c>.
     /// </summary>
     /// <param name="request">
     ///     The request builder.
     /// </param>
+    /// <param name="service">
+    ///     The service descriptor from the generated code, for example <c>Greeter.Descriptor</c>.
+    /// </param>
     /// <param name="method">
     ///     The method name, as in the <c>.proto</c> file or as the client names it (with the <c>Async</c> suffix).
     /// </param>
-    /// <typeparam name="TService">
-    ///     The generated client (<c>Greeter.GreeterClient</c>) or service base class (<c>Greeter.GreeterBase</c>).
-    /// </typeparam>
     /// <returns>
     ///     The request builder.
     /// </returns>
     /// <exception cref="ArgumentException">
-    ///     Thrown if <typeparamref name="TService" /> is not generated from a <c>.proto</c> file, or the service has
-    ///     no method with this name.
+    ///     Thrown if the service has no method with this name.
     /// </exception>
-    public static IRequestBuilder UsingGrpc<TService>(this IRequestBuilder request, string method)
-        where TService : class
+    public static IRequestBuilder UsingGrpc(this IRequestBuilder request, ServiceDescriptor service, string method)
     {
+        ArgumentNullException.ThrowIfNull(service);
         ArgumentException.ThrowIfNullOrEmpty(method);
 
-        var service = GetServiceDescriptor(typeof(TService));
         var descriptor = service.FindMethodByName(method);
 
         if (descriptor is null && method.EndsWith(AsyncSuffix, StringComparison.Ordinal))
@@ -153,16 +150,6 @@ public static class WireMockGrpcExtensions
                            .WithHeader("grpc-status", ((int)statusCode).ToString(CultureInfo.InvariantCulture));
 
         return detail is null ? response : response.WithHeader("grpc-message", Uri.EscapeDataString(detail));
-    }
-
-    private static ServiceDescriptor GetServiceDescriptor(Type type)
-    {
-        var descriptor = type.DeclaringType?
-                             .GetProperty("Descriptor", BindingFlags.Public | BindingFlags.Static)?
-                             .GetValue(null) as ServiceDescriptor;
-
-        return descriptor ?? throw new ArgumentException(
-            $"'{type}' is not a gRPC client or service base class generated from a .proto file.");
     }
 
     private static bool TryReadMessage<TMessage>(byte[]? body, out TMessage message)
