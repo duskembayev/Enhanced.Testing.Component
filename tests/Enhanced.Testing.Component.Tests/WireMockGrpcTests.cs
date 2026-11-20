@@ -66,6 +66,59 @@ public class WireMockGrpcTests : IAsyncLifetime
             async () => await Client.SayHelloAsync(new HelloRequest { Name = "someone else" }));
 
         Assert.Equal(StatusCode.Unimplemented, exception.StatusCode);
+        Assert.Contains("did not satisfy the 1 stub(s)", exception.Status.Detail);
+        Assert.Contains("greet.Greeter/SayHello", exception.Status.Detail);
+        Assert.Contains("\"name\": \"someone else\"", exception.Status.Detail);
+    }
+
+    [Fact]
+    public async Task ShouldExplainCallOfMethodWithoutStubs()
+    {
+        var withoutStubs = await Assert.ThrowsAsync<RpcException>(
+            async () => await Client.SayHelloAsync(new HelloRequest { Name = "world" }));
+
+        Assert.Equal(StatusCode.Unimplemented, withoutStubs.StatusCode);
+        Assert.Contains("the server has no gRPC stubs", withoutStubs.Status.Detail);
+
+        _greeter.Server
+                .Given(Request.Create().UsingGrpc("greet.Greeter/SayGoodbye"))
+                .RespondWith(Response.Create().WithGrpcMessage(new HelloReply { Message = "Bye" }));
+
+        var otherMethod = await Assert.ThrowsAsync<RpcException>(
+            async () => await Client.SayHelloAsync(new HelloRequest { Name = "world" }));
+
+        Assert.Contains("the method has no stubs", otherMethod.Status.Detail);
+        Assert.Contains("Stubbed methods: greet.Greeter/SayGoodbye", otherMethod.Status.Detail);
+    }
+
+    [Fact]
+    public async Task ShouldExplainUnmatchedCallAfterReset()
+    {
+        _greeter.Reset();
+
+        var exception = await Assert.ThrowsAsync<RpcException>(
+            async () => await Client.SayHelloAsync(new HelloRequest { Name = "world" }));
+
+        Assert.Equal(StatusCode.Unimplemented, exception.StatusCode);
+        Assert.Contains("No stub matched the gRPC call 'greet.Greeter/SayHello'", exception.Status.Detail);
+    }
+
+    [Fact]
+    public void ShouldRejectMessageTypeThatMethodDoesNotTake()
+    {
+        var exception = Assert.Throws<ArgumentException>(
+            () => Request.Create()
+                         .UsingGrpc(Greeter.Descriptor, nameof(Greeter.GreeterClient.SayHelloAsync))
+                         .WithGrpcMessage<HelloReply>(_ => true));
+
+        Assert.Contains("greet.Greeter/SayHello", exception.Message);
+        Assert.Contains("greet.HelloRequest", exception.Message);
+        Assert.Contains(nameof(HelloReply), exception.Message);
+
+        Assert.Throws<ArgumentException>(
+            () => Request.Create()
+                         .WithGrpcMessage<HelloReply>(_ => true)
+                         .UsingGrpc(Greeter.Descriptor, nameof(Greeter.GreeterClient.SayHelloAsync)));
     }
 
     [Fact]
@@ -172,6 +225,28 @@ public class WireMockGrpcTests : IAsyncLifetime
         await call.RequestStream.CompleteAsync();
 
         Assert.Equal("three names", (await call).Message);
+    }
+
+    [Fact]
+    public async Task ShouldExplainClientStreamingCallThatDoesNotMatch()
+    {
+        _greeter.Server
+                .Given(Request.Create()
+                              .UsingGrpc("greet.Greeter/CollectHellos")
+                              .WithGrpcMessages<HelloRequest>(requests => requests.Count == 3))
+                .RespondWith(Response.Create().WithGrpcMessage(new HelloReply { Message = "three names" }));
+
+        using var call = Invoker.AsyncClientStreamingCall(
+            Method(MethodType.ClientStreaming, "CollectHellos"), null, default);
+
+        await call.RequestStream.WriteAsync(new HelloRequest { Name = "a" });
+        await call.RequestStream.WriteAsync(new HelloRequest { Name = "b" });
+        await call.RequestStream.CompleteAsync();
+
+        var exception = await Assert.ThrowsAsync<RpcException>(async () => await call);
+
+        Assert.Equal(StatusCode.Unimplemented, exception.StatusCode);
+        Assert.Contains("[{ \"name\": \"a\" }, { \"name\": \"b\" }]", exception.Status.Detail);
     }
 
     [Fact]

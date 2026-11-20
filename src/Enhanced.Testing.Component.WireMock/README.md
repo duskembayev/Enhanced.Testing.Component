@@ -84,7 +84,10 @@ greeter.Server
 - `WithGrpcMessage<TRequest>(predicate)` matches the request message; leave it out to match every call of the method.
 - `WithGrpcMessage(message)` responds with a message, and `WithGrpcStatus(StatusCode.NotFound, "...")` fails the
   call with a status.
-- A call that no stub matches fails on the client with the `Unimplemented` status.
+- A call that no stub matches fails on the client with the `Unimplemented` status. The status detail tells whether
+  the method has stubs and shows the request message, for example
+  `the request did not satisfy the 1 stub(s) of this method. Request: { "name": "someone else" }`.
+- A stub whose message type is not the one the method takes throws when it is created, instead of never matching.
 - A server with `UseHttp2` does not answer HTTP/1.1 requests. Use one harness for gRPC and another for HTTP APIs.
 
 Streaming calls use the same extensions with several messages:

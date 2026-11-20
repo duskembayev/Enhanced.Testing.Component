@@ -15,6 +15,7 @@ public class WireMockHarness : Harness
 {
     private readonly string _endpointName = "http";
     private readonly string? _serviceName;
+    private bool _explainsGrpcCalls;
     private WireMockServer? _server;
 
     /// <summary>
@@ -125,7 +126,19 @@ public class WireMockHarness : Harness
     /// <exception cref="InvalidOperationException">
     ///     Thrown if the component is not started or the server is not running.
     /// </exception>
-    public void Reset() => Server.Reset();
+    public void Reset()
+    {
+        Server.Reset();
+        ExplainUnmatchedGrpcCalls();
+    }
+
+    private void ExplainUnmatchedGrpcCalls()
+    {
+        if (_explainsGrpcCalls && _server is not null)
+        {
+            GrpcUnmatchedCalls.Explain(_server);
+        }
+    }
 
     /// <inheritdoc />
     /// <exception cref="InvalidOperationException">
@@ -163,6 +176,8 @@ public class WireMockHarness : Harness
         var settings = new WireMockServerSettings { StartAdminInterface = false, UseHttp2 = UseHttp2 };
         ConfigureServer?.Invoke(settings);
         _server = WireMockServer.Start(settings);
+        _explainsGrpcCalls = settings.UseHttp2 == true;
+        ExplainUnmatchedGrpcCalls();
         return Task.CompletedTask;
     }
 

@@ -42,7 +42,10 @@ public static class WireMockGrpcExtensions
         ArgumentNullException.ThrowIfNull(request);
         ArgumentException.ThrowIfNullOrEmpty(method);
 
-        return request.UsingPost().WithPath("/" + method.TrimStart('/'));
+        method = method.TrimStart('/');
+        GrpcStub.For(request).Method = method;
+
+        return request.UsingPost().WithPath("/" + method);
     }
 
     /// <summary>
@@ -82,7 +85,16 @@ public static class WireMockGrpcExtensions
                 $"The gRPC service '{service.FullName}' has no method '{method}'.", nameof(method));
         }
 
-        return request.UsingGrpc($"{service.FullName}/{descriptor.Name}");
+        request = request.UsingGrpc($"{service.FullName}/{descriptor.Name}");
+
+        var stub = GrpcStub.For(request);
+        var parser = descriptor.InputType.Parser;
+
+        stub.RequestDescriptor = descriptor.InputType;
+        stub.DescribeRequest ??= body => TryReadFrames(body, out var frames) ? Format(parser, frames) : null;
+        stub.ThrowIfRequestTypeDoesNotFit();
+
+        return request;
     }
 
     /// <summary>
@@ -132,6 +144,12 @@ public static class WireMockGrpcExtensions
     {
         ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(predicate);
+
+        var stub = GrpcStub.For(request);
+
+        stub.RequestType = typeof(TRequest);
+        stub.DescribeRequest = body => TryReadMessages<TRequest>(body, out var messages) ? Format(messages) : null;
+        stub.ThrowIfRequestTypeDoesNotFit();
 
         return request.WithBody(body => TryReadMessages<TRequest>(body, out var messages) && predicate(messages));
     }
@@ -222,9 +240,37 @@ public static class WireMockGrpcExtensions
         where TMessage : IMessage<TMessage>, new()
     {
         var result = new List<TMessage>();
-        var rest = body.AsSpan();
 
         messages = result;
+
+        if (!TryReadFrames(body, out var frames))
+        {
+            return false;
+        }
+
+        try
+        {
+            foreach (var frame in frames)
+            {
+                var message = new TMessage();
+
+                message.MergeFrom(frame);
+                result.Add(message);
+            }
+        }
+        catch (InvalidProtocolBufferException)
+        {
+            return false;
+        }
+
+        return true;
+    }
+
+    private static bool TryReadFrames(byte[]? body, out List<byte[]> frames)
+    {
+        var rest = body.AsSpan();
+
+        frames = [];
 
         while (!rest.IsEmpty)
         {
@@ -240,22 +286,31 @@ public static class WireMockGrpcExtensions
                 return false;
             }
 
-            var message = new TMessage();
-
-            try
-            {
-                message.MergeFrom(rest.Slice(MessagePrefixLength, (int)length));
-            }
-            catch (InvalidProtocolBufferException)
-            {
-                return false;
-            }
-
-            result.Add(message);
+            frames.Add(rest.Slice(MessagePrefixLength, (int)length).ToArray());
             rest = rest.Slice(MessagePrefixLength + (int)length);
         }
 
         return true;
+    }
+
+    private static string? Format(MessageParser parser, List<byte[]> frames)
+    {
+        try
+        {
+            return Format(frames.ConvertAll(parser.ParseFrom));
+        }
+        catch (InvalidProtocolBufferException)
+        {
+            return null;
+        }
+    }
+
+    private static string Format<TMessage>(IReadOnlyList<TMessage> messages)
+        where TMessage : IMessage
+    {
+        var formatted = messages.Select(message => JsonFormatter.Default.Format(message)).ToList();
+
+        return formatted.Count == 1 ? formatted[0] : $"[{string.Join(", ", formatted)}]";
     }
 
     private static byte[] WriteMessages(IMessage[] messages)
