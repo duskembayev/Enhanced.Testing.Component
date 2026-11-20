@@ -36,7 +36,10 @@ public static class WireMockGrpcExtensions
         ArgumentNullException.ThrowIfNull(request);
         ArgumentException.ThrowIfNullOrEmpty(method);
 
-        return request.UsingPost().WithPath("/" + method.TrimStart('/'));
+        method = method.TrimStart('/');
+        GrpcStub.For(request).Method = method;
+
+        return request.UsingPost().WithPath("/" + method);
     }
 
     /// <summary>
@@ -76,7 +79,16 @@ public static class WireMockGrpcExtensions
                 $"The gRPC service '{service.FullName}' has no method '{method}'.", nameof(method));
         }
 
-        return request.UsingGrpc($"{service.FullName}/{descriptor.Name}");
+        request = request.UsingGrpc($"{service.FullName}/{descriptor.Name}");
+
+        var stub = GrpcStub.For(request);
+        var parser = descriptor.InputType.Parser;
+
+        stub.RequestDescriptor = descriptor.InputType;
+        stub.DescribeRequest ??= body => TryReadPayload(body, out var payload) ? Format(parser, payload) : null;
+        stub.ThrowIfRequestTypeDoesNotFit();
+
+        return request;
     }
 
     /// <summary>
@@ -100,6 +112,13 @@ public static class WireMockGrpcExtensions
     {
         ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(predicate);
+
+        var stub = GrpcStub.For(request);
+
+        stub.RequestType = typeof(TRequest);
+        stub.DescribeRequest = body =>
+            TryReadMessage<TRequest>(body, out var message) ? JsonFormatter.Default.Format(message) : null;
+        stub.ThrowIfRequestTypeDoesNotFit();
 
         return request.WithBody(body => TryReadMessage<TRequest>(body, out var message) && predicate(message));
     }
@@ -157,6 +176,26 @@ public static class WireMockGrpcExtensions
     {
         message = new TMessage();
 
+        if (!TryReadPayload(body, out var payload))
+        {
+            return false;
+        }
+
+        try
+        {
+            message.MergeFrom(payload);
+            return true;
+        }
+        catch (InvalidProtocolBufferException)
+        {
+            return false;
+        }
+    }
+
+    private static bool TryReadPayload(byte[]? body, out byte[] payload)
+    {
+        payload = [];
+
         if (body is null || body.Length < MessagePrefixLength || body[0] != 0)
         {
             return false;
@@ -169,14 +208,19 @@ public static class WireMockGrpcExtensions
             return false;
         }
 
+        payload = body[MessagePrefixLength..];
+        return true;
+    }
+
+    private static string? Format(MessageParser parser, byte[] payload)
+    {
         try
         {
-            message.MergeFrom(body.AsSpan(MessagePrefixLength));
-            return true;
+            return JsonFormatter.Default.Format(parser.ParseFrom(payload));
         }
         catch (InvalidProtocolBufferException)
         {
-            return false;
+            return null;
         }
     }
 
