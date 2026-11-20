@@ -51,6 +51,37 @@ var result = await consumer.WaitForMessageAsync(r => r.Message.Value.Contains("4
 Non-matching messages are skipped; a `TimeoutException` reports how many. `SeekToBeginning`/`SeekToEnd` move the
 position the wait starts from.
 
+## Checking what arrived so far
+
+`ReadToEndAsync` reads from the current position to the end of the topic and returns the messages. It does not wait
+for messages produced after the call, so it returns at once when nothing is left to read:
+
+```csharp
+var messages = await consumer.ReadToEndAsync();
+
+Assert.DoesNotContain(messages, r => r.Message.Key == "order-42");
+```
+
+Use it to assert that something was *not* produced, once you know the application has finished its work. See
+[Checking that nothing happened](https://github.com/duskembayev/Enhanced.Testing.Component/blob/main/docs/pitfalls.md#checking-that-nothing-happened)
+for how to know that without a fixed delay.
+
+## Waiting for the application's consumer
+
+An application whose consumer starts from the latest offset does not see a message produced before the consumer got
+its partitions. `WaitForAssignmentAsync` waits until the application's consumer group has every partition of the
+topic assigned:
+
+```csharp
+await kafka.WaitForAssignmentAsync("orders-service", "orders", TimeSpan.FromSeconds(30));
+
+await producer.ProduceAsync("order-42", "created");
+```
+
+Pass the application's `group.id`. If the application may read from the beginning in tests, setting its
+`auto.offset.reset` to `earliest` is simpler and needs no waiting; see
+[Common pitfalls](https://github.com/duskembayev/Enhanced.Testing.Component/blob/main/docs/pitfalls.md#the-application-misses-the-first-kafka-messages).
+
 ## A topic per test
 
 To let tests share one broker and still run in parallel, give each test its own topic. `CreateUniqueTopicAsync`

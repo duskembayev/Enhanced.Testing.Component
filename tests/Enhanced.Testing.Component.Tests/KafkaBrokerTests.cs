@@ -1,3 +1,4 @@
+using Confluent.Kafka;
 using Enhanced.Testing.Component;
 using Enhanced.Testing.Component.Kafka;
 using Microsoft.Extensions.Configuration;
@@ -202,6 +203,149 @@ public abstract class KafkaBrokerTests<TFixture>(TFixture fixture) : IClassFixtu
         Assert.Throws<ObjectDisposedException>(() => consumer.Consume(TimeSpan.Zero));
         await Assert.ThrowsAsync<ObjectDisposedException>(() => consumer.WaitForKeyAsync("key", MessageTimeout));
         await Assert.ThrowsAsync<ObjectDisposedException>(() => producer.ProduceAsync("key", "value"));
+    }
+
+    [Fact]
+    public async Task ShouldReadToEndOfTopic()
+    {
+        var topic = await fixture.Broker.CreateUniqueTopicAsync("read-to-end");
+
+        using var consumer = await fixture.Broker.CreateConsumerAsync<string, string>(topic);
+        using var producer = await fixture.Broker.CreateProducerAsync<string, string>(topic);
+
+        Assert.Empty(await consumer.ReadToEndAsync());
+
+        await producer.ProduceAsync("first", "1");
+        await producer.ProduceAsync("second", "2");
+
+        Assert.Equal(["first", "second"], (await consumer.ReadToEndAsync()).Select(result => result.Message.Key));
+        Assert.Empty(await consumer.ReadToEndAsync());
+
+        await producer.ProduceAsync("third", "3");
+        consumer.SeekToBeginning();
+
+        Assert.Equal(["first", "second", "third"],
+            (await consumer.ReadToEndAsync()).Select(result => result.Message.Key));
+    }
+
+    [Fact]
+    public async Task ShouldReadToEndAfterWaitingAndConsuming()
+    {
+        var topic = await fixture.Broker.CreateUniqueTopicAsync("read-to-end");
+
+        using var consumer = await fixture.Broker.CreateConsumerAsync<string, string>(topic);
+        using var producer = await fixture.Broker.CreateProducerAsync<string, string>(topic);
+
+        await producer.ProduceAsync("first", "1");
+        await consumer.WaitForKeyAsync("first", MessageTimeout);
+
+        Assert.Null(consumer.Consume(TimeSpan.FromMilliseconds(300)));
+        Assert.Empty(await consumer.ReadToEndAsync());
+
+        await producer.ProduceAsync("second", "2");
+
+        Assert.Equal(["second"], (await consumer.ReadToEndAsync()).Select(result => result.Message.Key));
+    }
+
+    [Fact]
+    public async Task ShouldReadToEndOfTopicWithTransactions()
+    {
+        var topic = await fixture.Broker.CreateUniqueTopicAsync("read-to-end");
+        var transactionTimeout = TimeSpan.FromSeconds(30);
+
+        using var consumer = await fixture.Broker.CreateConsumerAsync<string, string>(topic);
+        using var producer = new ProducerBuilder<string, string>(new ProducerConfig
+        {
+            BootstrapServers = fixture.Broker.GetConnectionString(),
+            TransactionalId = Guid.NewGuid().ToString("N")
+        }).Build();
+
+        producer.InitTransactions(transactionTimeout);
+
+        producer.BeginTransaction();
+        await producer.ProduceAsync(topic, new Message<string, string> { Key = "committed", Value = "1" });
+        producer.CommitTransaction(transactionTimeout);
+
+        producer.BeginTransaction();
+        await producer.ProduceAsync(topic, new Message<string, string> { Key = "aborted", Value = "2" });
+        producer.AbortTransaction(transactionTimeout);
+
+        Assert.Equal(["committed"], (await consumer.ReadToEndAsync()).Select(result => result.Message.Key));
+        Assert.Empty(await consumer.ReadToEndAsync());
+    }
+
+    [Fact]
+    public async Task ShouldReadToEndWithHarnessConsumer()
+    {
+        var key = Guid.NewGuid().ToString("N");
+
+        await fixture.Producer.ProduceAsync(key, "value");
+
+        Assert.Contains(await fixture.Consumer.ReadToEndAsync(), result => result.Message.Key == key);
+        Assert.Empty(await fixture.Consumer.ReadToEndAsync());
+        Assert.Null(fixture.Consumer.Consume(TimeSpan.FromMilliseconds(200)));
+    }
+
+    [Fact]
+    public async Task ShouldWaitUntilConsumerGroupIsAssigned()
+    {
+        var topic = await fixture.Broker.CreateUniqueTopicAsync("assignment");
+        var groupId = "group-" + Guid.NewGuid().ToString("N");
+        var received = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        using var stop = new CancellationTokenSource();
+
+        var application = Task.Run(() =>
+        {
+            using var consumer = new ConsumerBuilder<string, string>(new ConsumerConfig
+            {
+                BootstrapServers = fixture.Broker.GetConnectionString(),
+                GroupId = groupId,
+                AutoOffsetReset = AutoOffsetReset.Latest
+            }).Build();
+
+            consumer.Subscribe(topic);
+
+            try
+            {
+                while (true)
+                {
+                    received.TrySetResult(consumer.Consume(stop.Token).Message.Key);
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                consumer.Close();
+            }
+        });
+
+        try
+        {
+            await fixture.Broker.WaitForAssignmentAsync(groupId, topic, TimeSpan.FromSeconds(30));
+
+            using var producer = await fixture.Broker.CreateProducerAsync<string, string>(topic);
+            await producer.ProduceAsync("after-assignment", "value");
+
+            Assert.Equal("after-assignment", await received.Task.WaitAsync(MessageTimeout));
+        }
+        finally
+        {
+            await stop.CancelAsync();
+            await application;
+        }
+    }
+
+    [Fact]
+    public async Task ShouldFailWhenConsumerGroupIsNotAssigned()
+    {
+        var topic = await fixture.Broker.CreateUniqueTopicAsync("assignment");
+        var groupId = "missing-" + Guid.NewGuid().ToString("N");
+
+        var exception = await Assert.ThrowsAsync<TimeoutException>(
+            () => fixture.Broker.WaitForAssignmentAsync(groupId, topic, TimeSpan.FromSeconds(1)));
+
+        Assert.Contains(groupId, exception.Message);
+        Assert.Contains(topic, exception.Message);
     }
 
     private async Task<string> RunIsolatedScenarioAsync(string value)

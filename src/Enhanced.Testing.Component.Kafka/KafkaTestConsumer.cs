@@ -43,7 +43,7 @@ public sealed class KafkaTestConsumer<TKey, TValue> : IDisposable
     public ConsumeResult<TKey, TValue>? Consume(TimeSpan timeout)
     {
         ThrowIfDisposed();
-        return _reader.Consumer.Consume(timeout);
+        return _reader.Consume(timeout);
     }
 
     /// <summary>
@@ -97,6 +97,30 @@ public sealed class KafkaTestConsumer<TKey, TValue> : IDisposable
                          .ConfigureAwait(false);
 
         return result.Message;
+    }
+
+    /// <summary>
+    ///     Reads the messages from the current position to the end of the topic and returns them. It does not wait for
+    ///     messages produced after the call.
+    /// </summary>
+    /// <remarks>
+    ///     Use it to check what the application produced so far, for example that nothing arrived, once you know the
+    ///     application has finished its work. When the position is already at the end, it returns an empty list at
+    ///     once.
+    /// </remarks>
+    /// <param name="cancellationToken">
+    ///     The cancellation token.
+    /// </param>
+    /// <returns>
+    ///     The messages in the order they were produced.
+    /// </returns>
+    /// <exception cref="TimeoutException">
+    ///     Thrown when the end of the topic is not reached within 30 seconds.
+    /// </exception>
+    public Task<IReadOnlyList<ConsumeResult<TKey, TValue>>> ReadToEndAsync(CancellationToken cancellationToken = default)
+    {
+        ThrowIfDisposed();
+        return _reader.ReadToEndAsync(cancellationToken);
     }
 
     /// <summary>

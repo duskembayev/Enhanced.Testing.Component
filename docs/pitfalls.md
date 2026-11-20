@@ -32,6 +32,16 @@ matters only for a consumer group without committed offsets, which is the case i
 own consumers (`KafkaConsumerHarness`, `CreateConsumerAsync`) start at the end of the topic and are ready when the
 component has started.
 
+Some applications read from the end on purpose, and the tests should cover them as they run in production. Keep the
+setting then and wait for the application's consumer group before producing:
+
+```csharp
+await fixture.Kafka.WaitForAssignmentAsync("orders-service", "orders", TimeSpan.FromSeconds(30));
+```
+
+It returns when the group has every partition of the topic assigned, and throws a `TimeoutException` that tells the
+state of the group otherwise.
+
 ## Checking that nothing happened
 
 **Symptom:** a test waits a few seconds and then asserts that no message arrived or no row was written. It is slow,
@@ -60,6 +70,16 @@ Assert.False(ignoredOrderWasConfirmed);
 
 The order is guaranteed only within one partition, and only if the application handles a partition's messages one
 after another. Topics created by the harness have one partition.
+
+When the sentinel leaves its trace somewhere else, for example in a database row, wait for that trace and then read
+what the topic holds. `ReadToEndAsync` returns the messages up to the current end of the topic and does not wait for
+new ones:
+
+```csharp
+var confirmations = await fixture.Confirmations.ReadToEndAsync();
+
+Assert.DoesNotContain(confirmations, result => result.Message.Key == ignoredOrderId);
+```
 
 ## A setting from `ConfigureAppConfiguration` is ignored
 

@@ -121,9 +121,11 @@ More templates (Kafka, Redis, WireMock, time, gRPC): [references/templates.md](r
   registers services.
 - **Let the app's Kafka consumers read from the beginning** (`AutoOffsetReset=Earliest` through the configuration key
   the app's consumer uses) instead of waiting after the start; with the default `Latest` a message produced before
-  the consumer gets its partitions is lost.
+  the consumer gets its partitions is lost. If the app must keep `Latest`, wait for its consumer group with
+  `kafka.WaitForAssignmentAsync(groupId, topic, timeout)` before producing.
 - **To check that nothing happened**, send a sentinel message after the tested one and wait for the sentinel's
-  result instead of waiting a fixed time.
+  result instead of waiting a fixed time; `consumer.ReadToEndAsync()` then returns what the topic holds without a
+  timeout.
 - **Use the defaults for speed.** Containers start in parallel, Kafka uses `apache/kafka-native`, PostgreSQL and Redis
   run without durability. Only set `Durable = true` when a test needs persistence or mounts its own data volume.
 - **Customize containers through the harness**, not by subclassing: `Image = "<image>:<tag>"` (each container
