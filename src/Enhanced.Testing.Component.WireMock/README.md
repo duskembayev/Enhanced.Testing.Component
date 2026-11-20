@@ -73,13 +73,14 @@ var greeter = new WireMockHarness { ConfigurationKey = "Greeter:Address", UseHtt
 ```csharp
 greeter.Server
        .Given(Request.Create()
-                     .UsingGrpc(Greeter.Descriptor, "SayHello")
+                     .UsingGrpc<Greeter.GreeterClient>(nameof(Greeter.GreeterClient.SayHelloAsync))
                      .WithGrpcMessage<HelloRequest>(request => request.Name == "world"))
        .RespondWith(Response.Create().WithGrpcMessage(new HelloReply { Message = "Hello, world" }));
 ```
 
-- `UsingGrpc` takes the service descriptor from the generated code and a method name, or the full method name as a
-  string (`"greet.Greeter/SayHello"`).
+- `UsingGrpc<TService>(method)` takes the generated client or service base class and the name of one of its methods,
+  so a wrong name does not compile. Without generated code, pass the full method name as a string:
+  `UsingGrpc("greet.Greeter/SayHello")`.
 - `WithGrpcMessage<TRequest>(predicate)` matches the request message; leave it out to match every call of the method.
 - `WithGrpcMessage(message)` responds with a message, and `WithGrpcStatus(StatusCode.NotFound, "...")` fails the
   call with a status.

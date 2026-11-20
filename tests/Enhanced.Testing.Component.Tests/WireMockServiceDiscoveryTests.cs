@@ -72,7 +72,7 @@ public class WireMockServiceDiscoveryTests : IAsyncLifetime
     public async Task ShouldResolveGrpcService()
     {
         _greeter.Server
-                .Given(Request.Create().UsingGrpc(Greeter.Descriptor, "SayHello"))
+                .Given(Request.Create().UsingGrpc<Greeter.GreeterClient>(nameof(Greeter.GreeterClient.SayHelloAsync)))
                 .RespondWith(Response.Create().WithGrpcMessage(new HelloReply { Message = "Hello from the fake" }));
 
         await using var services = CreateServices(

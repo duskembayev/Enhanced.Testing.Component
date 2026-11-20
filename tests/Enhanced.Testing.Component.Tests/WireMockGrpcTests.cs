@@ -28,7 +28,7 @@ public class WireMockGrpcTests : IAsyncLifetime
     {
         _greeter.Server
                 .Given(Request.Create()
-                              .UsingGrpc(Greeter.Descriptor, "SayHello")
+                              .UsingGrpc<Greeter.GreeterClient>(nameof(Greeter.GreeterClient.SayHelloAsync))
                               .WithGrpcMessage<HelloRequest>(request => request.Name == "world"))
                 .RespondWith(Response.Create().WithGrpcMessage(new HelloReply { Message = "Hello from the fake" }));
 
@@ -57,7 +57,7 @@ public class WireMockGrpcTests : IAsyncLifetime
     {
         _greeter.Server
                 .Given(Request.Create()
-                              .UsingGrpc(Greeter.Descriptor, "SayHello")
+                              .UsingGrpc<Greeter.GreeterClient>(nameof(Greeter.GreeterClient.SayHelloAsync))
                               .WithGrpcMessage<HelloRequest>(request => request.Name == "world"))
                 .RespondWith(Response.Create().WithGrpcMessage(new HelloReply { Message = "Hello" }));
 
@@ -71,7 +71,7 @@ public class WireMockGrpcTests : IAsyncLifetime
     public async Task ShouldRespondWithGrpcStatus()
     {
         _greeter.Server
-                .Given(Request.Create().UsingGrpc(Greeter.Descriptor, "SayHello"))
+                .Given(Request.Create().UsingGrpc<Greeter.GreeterClient>(nameof(Greeter.GreeterClient.SayHelloAsync)))
                 .RespondWith(Response.Create().WithGrpcStatus(StatusCode.NotFound, "No such person: Zoë & co."));
 
         var exception = await Assert.ThrowsAsync<RpcException>(
@@ -82,13 +82,26 @@ public class WireMockGrpcTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task ShouldMatchGrpcMethodOfServiceBaseClass()
+    {
+        _greeter.Server
+                .Given(Request.Create().UsingGrpc<Greeter.GreeterBase>(nameof(Greeter.GreeterBase.SayHello)))
+                .RespondWith(Response.Create().WithGrpcMessage(new HelloReply { Message = "matched" }));
+
+        var reply = await Client.SayHelloAsync(new HelloRequest { Name = "anyone" });
+
+        Assert.Equal("matched", reply.Message);
+    }
+
+    [Fact]
     public void ShouldRejectUnknownGrpcMethod()
     {
         var exception = Assert.Throws<ArgumentException>(
-            () => Request.Create().UsingGrpc(Greeter.Descriptor, "SayGoodbye"));
+            () => Request.Create().UsingGrpc<Greeter.GreeterClient>("SayGoodbye"));
 
         Assert.Contains("greet.Greeter", exception.Message);
         Assert.Contains("SayGoodbye", exception.Message);
+        Assert.Throws<ArgumentException>(() => Request.Create().UsingGrpc<WireMockGrpcTests>("SayHello"));
     }
 
     async Task IAsyncLifetime.InitializeAsync()
