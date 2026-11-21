@@ -135,6 +135,8 @@ var error = exception.GetRpcStatus()?.GetDetail<ErrorInfo>();
 - `WithGrpcTrailer(key, value)` adds any other trailer, after a message or with a failure status. A text value is
   printable ASCII; a trailer whose name ends with `-bin` takes bytes and is sent base64-encoded, as gRPC requires.
   The client reads trailers from `RpcException.Trailers`, or from `GetTrailers()` of a call that succeeded.
+  Names that start with `grpc-` are reserved: set the status, its message and its details with `WithGrpcStatus`.
+- `WithGrpcStatus` called again replaces the status set before, with its message and details.
 
 ```csharp
 Response.Create()

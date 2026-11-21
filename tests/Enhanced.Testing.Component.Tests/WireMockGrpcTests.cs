@@ -6,6 +6,7 @@ using Google.Rpc;
 using Grpc.Core;
 using Grpc.Net.Client;
 using SampleService;
+using System.Reflection;
 using WireMock.RequestBuilders;
 using WireMock.ResponseBuilders;
 
@@ -263,6 +264,53 @@ public class WireMockGrpcTests : IAsyncLifetime
         Assert.Throws<ArgumentException>(() => Response.Create().WithGrpcTrailer("error-code", "Zoë"));
     }
 
+    [Theory]
+    [InlineData("grpc-status")]
+    [InlineData("grpc-message")]
+    [InlineData("Grpc-Encoding")]
+    public void ShouldRejectReservedGrpcTrailer(string key)
+    {
+        var exception = Assert.Throws<ArgumentException>(() => Response.Create().WithGrpcTrailer(key, "5"));
+
+        Assert.Contains(nameof(WireMockGrpcExtensions.WithGrpcStatus), exception.Message);
+
+        Assert.Throws<ArgumentException>(
+            () => Response.Create().WithGrpcTrailer("grpc-status-details-bin", [1, 2, 3]));
+    }
+
+    [Fact]
+    public async Task ShouldSendLastGrpcStatus()
+    {
+        _greeter.Server
+                .Given(Request.Create().UsingGrpc(Greeter.Descriptor, nameof(Greeter.GreeterClient.SayHelloAsync)))
+                .RespondWith(Response.Create()
+                                     .WithGrpcStatus(StatusCode.Aborted, "First",
+                                         new ErrorInfo { Reason = "FIRST" })
+                                     .WithGrpcTrailer("served-by", "fake")
+                                     .WithGrpcStatus(StatusCode.NotFound, "Second"));
+
+        var exception = await Assert.ThrowsAsync<RpcException>(
+            async () => await Client.SayHelloAsync(new HelloRequest { Name = "Zoë" }));
+
+        Assert.Equal(StatusCode.NotFound, exception.StatusCode);
+        Assert.Equal("Second", exception.Status.Detail);
+        Assert.Null(exception.GetRpcStatus());
+        Assert.Equal("fake", exception.Trailers.GetValue("served-by"));
+    }
+
+    [Fact]
+    public void ShouldRejectResponseBuilderOfAnotherType()
+    {
+        var builder = DispatchProxy.Create<IResponseBuilder, OtherResponseBuilder>();
+
+        var exception = Assert.Throws<InvalidOperationException>(
+            () => builder.WithGrpcStatus(StatusCode.NotFound));
+
+        Assert.Contains(typeof(Response).FullName!, exception.Message);
+        Assert.Contains(typeof(Response).Assembly.GetName().Version!.ToString(), exception.Message);
+        Assert.Throws<InvalidOperationException>(() => builder.WithGrpcMessage(new HelloReply()));
+    }
+
     [Fact]
     public async Task ShouldMatchGrpcMethodByNameFromProto()
     {
@@ -462,5 +510,10 @@ public class WireMockGrpcTests : IAsyncLifetime
     {
         _channel?.Dispose();
         await _component.StopAsync(default);
+    }
+
+    public class OtherResponseBuilder : DispatchProxy
+    {
+        protected override object? Invoke(MethodInfo? targetMethod, object?[]? args) => null;
     }
 }

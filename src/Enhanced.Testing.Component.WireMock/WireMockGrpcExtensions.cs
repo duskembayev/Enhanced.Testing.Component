@@ -6,6 +6,7 @@ using Google.Protobuf.WellKnownTypes;
 using Grpc.Core;
 using WireMock.RequestBuilders;
 using WireMock.ResponseBuilders;
+using WireMock.Types;
 
 namespace Enhanced.Testing.Component.WireMock;
 
@@ -23,6 +24,7 @@ public static class WireMockGrpcExtensions
     private const string AsyncSuffix = "Async";
     private const int MessagePrefixLength = 5;
     private const string BinarySuffix = "-bin";
+    private const string ReservedPrefix = "grpc-";
     private const string DetailsTrailer = "grpc-status-details-bin";
     private const string MessageTrailer = "grpc-message";
     private const string StatusTrailer = "grpc-status";
@@ -249,7 +251,7 @@ public static class WireMockGrpcExtensions
     ///     The response builder.
     /// </param>
     /// <param name="key">
-    ///     The trailer name. It must not end with <c>-bin</c>.
+    ///     The trailer name. It must not end with <c>-bin</c> or start with <c>grpc-</c>.
     /// </param>
     /// <param name="value">
     ///     The value, printable ASCII characters only.
@@ -258,13 +260,15 @@ public static class WireMockGrpcExtensions
     ///     The response builder.
     /// </returns>
     /// <exception cref="ArgumentException">
-    ///     Thrown if the name ends with <c>-bin</c> or the value has characters other than printable ASCII.
+    ///     Thrown if the name ends with <c>-bin</c> or starts with <c>grpc-</c>, or the value has characters other
+    ///     than printable ASCII.
     /// </exception>
     public static IResponseBuilder WithGrpcTrailer(this IResponseBuilder response, string key, string value)
     {
         ArgumentNullException.ThrowIfNull(response);
         ArgumentException.ThrowIfNullOrEmpty(key);
         ArgumentNullException.ThrowIfNull(value);
+        ThrowIfReserved(key);
 
         if (key.EndsWith(BinarySuffix, StringComparison.OrdinalIgnoreCase))
         {
@@ -290,7 +294,7 @@ public static class WireMockGrpcExtensions
     ///     The response builder.
     /// </param>
     /// <param name="key">
-    ///     The trailer name. It must end with <c>-bin</c>.
+    ///     The trailer name. It must end with <c>-bin</c> and not start with <c>grpc-</c>.
     /// </param>
     /// <param name="value">
     ///     The value; it is sent base64-encoded, as gRPC requires for binary metadata.
@@ -299,13 +303,14 @@ public static class WireMockGrpcExtensions
     ///     The response builder.
     /// </returns>
     /// <exception cref="ArgumentException">
-    ///     Thrown if the name does not end with <c>-bin</c>.
+    ///     Thrown if the name does not end with <c>-bin</c> or starts with <c>grpc-</c>.
     /// </exception>
     public static IResponseBuilder WithGrpcTrailer(this IResponseBuilder response, string key, byte[] value)
     {
         ArgumentNullException.ThrowIfNull(response);
         ArgumentException.ThrowIfNullOrEmpty(key);
         ArgumentNullException.ThrowIfNull(value);
+        ThrowIfReserved(key);
 
         if (!key.EndsWith(BinarySuffix, StringComparison.OrdinalIgnoreCase))
         {
@@ -320,12 +325,35 @@ public static class WireMockGrpcExtensions
         response.WithHeader("Content-Type", ContentType);
 
     private static bool HasStatus(IResponseBuilder response) =>
-        response is Response { ResponseMessage.TrailingHeaders: { } trailers } && trailers.ContainsKey(StatusTrailer);
+        Trailers(response)?.ContainsKey(StatusTrailer) == true;
+
+    private static IDictionary<string, WireMockList<string>>? Trailers(IResponseBuilder response)
+    {
+        if (response is Response { ResponseMessage: { } message })
+        {
+            return message.TrailingHeaders;
+        }
+
+        throw new InvalidOperationException(
+            $"The gRPC extensions keep the status in the trailers of WireMock's own response builder " +
+            $"('{typeof(Response).FullName}' with a response message), which '{response.GetType().FullName}' is " +
+            $"not. WireMock.Net version: {typeof(Response).Assembly.GetName().Version}.");
+    }
+
+    private static void ThrowIfReserved(string key)
+    {
+        if (key.StartsWith(ReservedPrefix, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new ArgumentException(
+                $"The trailer '{key}' is reserved: gRPC keeps the names that start with '{ReservedPrefix}' for " +
+                $"itself. Set the status, its message and its details with {nameof(WithGrpcStatus)}.", nameof(key));
+        }
+    }
 
     private static IResponseBuilder WithStatus(IResponseBuilder response, StatusCode statusCode, string? message,
         IMessage[] details)
     {
-        if (response is Response { ResponseMessage.TrailingHeaders: { } trailers })
+        if (Trailers(response) is { } trailers)
         {
             trailers.Remove(StatusTrailer);
             trailers.Remove(MessageTrailer);
