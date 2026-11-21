@@ -90,8 +90,23 @@ greeter.Server
   the method has stubs and shows the request message, for example
   `the request did not satisfy the 1 stub(s) of this method. Request: { "name": "someone else" }`.
 - A stub whose message type is not the one the method takes throws when it is created, instead of never matching.
-- The extensions cover unary calls, not streaming.
 - A server with `UseHttp2` does not answer HTTP/1.1 requests. Use one harness for gRPC and another for HTTP APIs.
+
+Streaming calls use the same extensions with several messages:
+
+```csharp
+greeter.Server
+       .Given(Request.Create().UsingGrpc(Greeter.Descriptor, nameof(Greeter.GreeterClient.SayHellos)))
+       .RespondWith(Response.Create()
+                            .WithGrpcMessages(new HelloReply { Message = "first" }, new HelloReply { Message = "second" })
+                            .WithGrpcStatus(StatusCode.Aborted, "The stream broke."));
+```
+
+- `WithGrpcMessages(messages)` responds to a server streaming call; with `WithGrpcStatus` the call fails once the
+  client has read the messages. Error details and trailers arrive after the messages too.
+- `WithGrpcMessages<TRequest>(predicate)` matches a client streaming call by all the messages the client sent.
+- The server answers when the client has completed its request, and sends all response messages together. A duplex
+  call works when the client sends everything before it reads; a call in which the two sides take turns does not.
 
 ### Error details and trailers
 

@@ -14,6 +14,10 @@ namespace Enhanced.Testing.Component.WireMock;
 ///     Extensions that describe gRPC calls and responses with the generated message types. The server must listen
 ///     over HTTP/2; see <see cref="WireMockHarness.UseHttp2" />.
 /// </summary>
+/// <remarks>
+///     The server answers a call when the client has completed its request, so it can fake unary, server streaming
+///     and client streaming calls, and duplex calls in which the client sends everything before it reads.
+/// </remarks>
 public static class WireMockGrpcExtensions
 {
     private const string ContentType = "application/grpc";
@@ -92,14 +96,15 @@ public static class WireMockGrpcExtensions
         var parser = descriptor.InputType.Parser;
 
         stub.RequestDescriptor = descriptor.InputType;
-        stub.DescribeRequest ??= body => TryReadPayload(body, out var payload) ? Format(parser, payload) : null;
+        stub.DescribeRequest ??= body => TryReadFrames(body, out var frames) ? Format(parser, frames) : null;
         stub.ThrowIfRequestTypeDoesNotFit();
 
         return request;
     }
 
     /// <summary>
-    ///     Matches calls whose request message satisfies the predicate.
+    ///     Matches calls whose request message satisfies the predicate. A call that sent no message or several
+    ///     messages does not match.
     /// </summary>
     /// <param name="request">
     ///     The request builder.
@@ -117,22 +122,46 @@ public static class WireMockGrpcExtensions
         Func<TRequest, bool> predicate)
         where TRequest : IMessage<TRequest>, new()
     {
+        ArgumentNullException.ThrowIfNull(predicate);
+
+        return request.WithGrpcMessages<TRequest>(messages => messages.Count == 1 && predicate(messages[0]));
+    }
+
+    /// <summary>
+    ///     Matches client streaming calls by all the messages the client sent before it completed the request
+    ///     stream.
+    /// </summary>
+    /// <param name="request">
+    ///     The request builder.
+    /// </param>
+    /// <param name="predicate">
+    ///     The condition the request messages must satisfy, in the order they were sent.
+    /// </param>
+    /// <typeparam name="TRequest">
+    ///     The generated request message type.
+    /// </typeparam>
+    /// <returns>
+    ///     The request builder.
+    /// </returns>
+    public static IRequestBuilder WithGrpcMessages<TRequest>(this IRequestBuilder request,
+        Func<IReadOnlyList<TRequest>, bool> predicate)
+        where TRequest : IMessage<TRequest>, new()
+    {
         ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(predicate);
 
         var stub = GrpcStub.For(request);
 
         stub.RequestType = typeof(TRequest);
-        stub.DescribeRequest = body =>
-            TryReadMessage<TRequest>(body, out var message) ? JsonFormatter.Default.Format(message) : null;
+        stub.DescribeRequest = body => TryReadMessages<TRequest>(body, out var messages) ? Format(messages) : null;
         stub.ThrowIfRequestTypeDoesNotFit();
 
-        return request.WithBody(body => TryReadMessage<TRequest>(body, out var message) && predicate(message));
+        return request.WithBody(body => TryReadMessages<TRequest>(body, out var messages) && predicate(messages));
     }
 
     /// <summary>
-    ///     Responds to a unary call with the message. The status is <see cref="StatusCode.OK" /> unless
-    ///     <see cref="WithGrpcStatus" /> sets another one.
+    ///     Responds with the message. The status is <see cref="StatusCode.OK" /> unless <see cref="WithGrpcStatus" />
+    ///     sets another one.
     /// </summary>
     /// <param name="response">
     ///     The response builder.
@@ -145,19 +174,44 @@ public static class WireMockGrpcExtensions
     /// </returns>
     public static IResponseBuilder WithGrpcMessage(this IResponseBuilder response, IMessage message)
     {
-        ArgumentNullException.ThrowIfNull(response);
         ArgumentNullException.ThrowIfNull(message);
+
+        return response.WithGrpcMessages(message);
+    }
+
+    /// <summary>
+    ///     Responds to a server streaming call with the messages, in this order. The status is
+    ///     <see cref="StatusCode.OK" /> unless <see cref="WithGrpcStatus" /> sets another one, which fails the call
+    ///     after the messages.
+    /// </summary>
+    /// <remarks>
+    ///     The messages are sent together, when the client has completed its request.
+    /// </remarks>
+    /// <param name="response">
+    ///     The response builder.
+    /// </param>
+    /// <param name="messages">
+    ///     The response messages.
+    /// </param>
+    /// <returns>
+    ///     The response builder.
+    /// </returns>
+    public static IResponseBuilder WithGrpcMessages(this IResponseBuilder response, params IMessage[] messages)
+    {
+        ArgumentNullException.ThrowIfNull(response);
+        ArgumentNullException.ThrowIfNull(messages);
 
         if (!HasStatus(response))
         {
             response = WithStatus(response, StatusCode.OK, null, []);
         }
 
-        return response.WithBody(WriteMessage(message));
+        return response.WithBody(WriteMessages(messages));
     }
 
     /// <summary>
-    ///     Ends the call with a gRPC status, as a service that fails the call does.
+    ///     Ends the call with a gRPC status, as a service that fails the call does. Without messages the client gets
+    ///     only the status; with <see cref="WithGrpcMessages" /> it gets the messages first.
     /// </summary>
     /// <remarks>
     ///     With <paramref name="details" /> the status follows the gRPC rich error model: the client reads the code,
@@ -350,52 +404,68 @@ public static class WireMockGrpcExtensions
         return buffer.ToArray();
     }
 
-    private static bool TryReadMessage<TMessage>(byte[]? body, out TMessage message)
+    private static bool TryReadMessages<TMessage>(byte[]? body, out IReadOnlyList<TMessage> messages)
         where TMessage : IMessage<TMessage>, new()
     {
-        message = new TMessage();
+        var result = new List<TMessage>();
 
-        if (!TryReadPayload(body, out var payload))
+        messages = result;
+
+        if (!TryReadFrames(body, out var frames))
         {
             return false;
         }
 
         try
         {
-            message.MergeFrom(payload);
-            return true;
+            foreach (var frame in frames)
+            {
+                var message = new TMessage();
+
+                message.MergeFrom(frame);
+                result.Add(message);
+            }
         }
         catch (InvalidProtocolBufferException)
         {
             return false;
         }
-    }
 
-    private static bool TryReadPayload(byte[]? body, out byte[] payload)
-    {
-        payload = [];
-
-        if (body is null || body.Length < MessagePrefixLength || body[0] != 0)
-        {
-            return false;
-        }
-
-        var length = BinaryPrimitives.ReadUInt32BigEndian(body.AsSpan(1, 4));
-
-        if (length != body.Length - MessagePrefixLength)
-        {
-            return false;
-        }
-
-        payload = body[MessagePrefixLength..];
         return true;
     }
 
-    private static string? Format(MessageParser parser, byte[] payload)
+    private static bool TryReadFrames(byte[]? body, out List<byte[]> frames)
+    {
+        var rest = body.AsSpan();
+
+        frames = [];
+
+        while (!rest.IsEmpty)
+        {
+            if (rest.Length < MessagePrefixLength || rest[0] != 0)
+            {
+                return false;
+            }
+
+            var length = BinaryPrimitives.ReadUInt32BigEndian(rest.Slice(1, 4));
+
+            if (length > rest.Length - MessagePrefixLength)
+            {
+                return false;
+            }
+
+            frames.Add(rest.Slice(MessagePrefixLength, (int)length).ToArray());
+            rest = rest.Slice(MessagePrefixLength + (int)length);
+        }
+
+        return true;
+    }
+
+    private static string? Format(MessageParser parser, List<byte[]> frames)
     {
         try
         {
-            return JsonFormatter.Default.Format(parser.ParseFrom(payload));
+            return Format(frames.ConvertAll(parser.ParseFrom));
         }
         catch (InvalidProtocolBufferException)
         {
@@ -403,13 +473,26 @@ public static class WireMockGrpcExtensions
         }
     }
 
-    private static byte[] WriteMessage(IMessage message)
+    private static string Format<TMessage>(IReadOnlyList<TMessage> messages)
+        where TMessage : IMessage
     {
-        var size = message.CalculateSize();
-        var body = new byte[MessagePrefixLength + size];
+        var formatted = messages.Select(message => JsonFormatter.Default.Format(message)).ToList();
 
-        BinaryPrimitives.WriteUInt32BigEndian(body.AsSpan(1, 4), (uint)size);
-        message.WriteTo(body.AsSpan(MessagePrefixLength));
+        return formatted.Count == 1 ? formatted[0] : $"[{string.Join(", ", formatted)}]";
+    }
+
+    private static byte[] WriteMessages(IMessage[] messages)
+    {
+        var sizes = Array.ConvertAll(messages, message => message.CalculateSize());
+        var body = new byte[sizes.Sum() + (MessagePrefixLength * messages.Length)];
+        var rest = body.AsSpan();
+
+        for (var i = 0; i < messages.Length; i++)
+        {
+            BinaryPrimitives.WriteUInt32BigEndian(rest.Slice(1, 4), (uint)sizes[i]);
+            messages[i].WriteTo(rest.Slice(MessagePrefixLength, sizes[i]));
+            rest = rest.Slice(MessagePrefixLength + sizes[i]);
+        }
 
         return body;
     }
