@@ -84,12 +84,49 @@ greeter.Server
 - `WithGrpcMessage<TRequest>(predicate)` matches the request message; leave it out to match every call of the method.
 - `WithGrpcMessage(message)` responds with a message, and `WithGrpcStatus(StatusCode.NotFound, "...")` fails the
   call with a status.
+- `WithGrpcStatus(code, message, details)` adds error details to the status and `WithGrpcTrailer(key, value)` adds a
+  trailer; see [Error details and trailers](#error-details-and-trailers).
 - A call that no stub matches fails on the client with the `Unimplemented` status. The status detail tells whether
   the method has stubs and shows the request message, for example
   `the request did not satisfy the 1 stub(s) of this method. Request: { "name": "someone else" }`.
 - A stub whose message type is not the one the method takes throws when it is created, instead of never matching.
 - The extensions cover unary calls, not streaming.
 - A server with `UseHttp2` does not answer HTTP/1.1 requests. Use one harness for gRPC and another for HTTP APIs.
+
+### Error details and trailers
+
+A service that follows the gRPC [rich error model](https://grpc.io/docs/guides/error/#richer-error-model) sends a
+`google.rpc.Status` with details next to the status code. Pass the details to `WithGrpcStatus`:
+
+```csharp
+greeter.Server
+       .Given(Request.Create().UsingGrpc(Greeter.Descriptor, nameof(Greeter.GreeterClient.SayHelloAsync)))
+       .RespondWith(Response.Create()
+                            .WithGrpcStatus(StatusCode.FailedPrecondition, "The person is blocked",
+                                new ErrorInfo { Reason = "PERSON_BLOCKED", Domain = "greeter" }));
+```
+
+The application reads them as it does from the real service, for example with `GetRpcStatus()` of the
+`Grpc.StatusProto` package:
+
+```csharp
+var error = exception.GetRpcStatus()?.GetDetail<ErrorInfo>();
+```
+
+- A detail is any protobuf message: a standard one such as `ErrorInfo` (package `Google.Api.CommonProtos`) or a
+  message of the service's own. Each one is packed into `Any`; an `Any` is sent as it is.
+- To send a `Google.Rpc.Status` you already have, pass its parts:
+  `WithGrpcStatus((StatusCode)status.Code, status.Message, [.. status.Details])`.
+- `WithGrpcTrailer(key, value)` adds any other trailer, after a message or with a failure status. A text value is
+  printable ASCII; a trailer whose name ends with `-bin` takes bytes and is sent base64-encoded, as gRPC requires.
+  The client reads trailers from `RpcException.Trailers`, or from `GetTrailers()` of a call that succeeded.
+
+```csharp
+Response.Create()
+        .WithGrpcStatus(StatusCode.PermissionDenied, "Blocked")
+        .WithGrpcTrailer("error-code", "PERSON_BLOCKED")
+        .WithGrpcTrailer("signature-bin", signature);
+```
 
 The package depends on `WireMock.Net.Minimal`. Add the full `WireMock.Net` package if you need its extra matchers
 (GraphQL, ProtoBuf).

@@ -2,6 +2,7 @@ using System.Buffers.Binary;
 using System.Globalization;
 using Google.Protobuf;
 using Google.Protobuf.Reflection;
+using Google.Protobuf.WellKnownTypes;
 using Grpc.Core;
 using WireMock.RequestBuilders;
 using WireMock.ResponseBuilders;
@@ -17,6 +18,10 @@ public static class WireMockGrpcExtensions
     private const string ContentType = "application/grpc";
     private const string AsyncSuffix = "Async";
     private const int MessagePrefixLength = 5;
+    private const string BinarySuffix = "-bin";
+    private const string DetailsTrailer = "grpc-status-details-bin";
+    private const string MessageTrailer = "grpc-message";
+    private const string StatusTrailer = "grpc-status";
 
     /// <summary>
     ///     Matches calls of a gRPC method.
@@ -124,7 +129,8 @@ public static class WireMockGrpcExtensions
     }
 
     /// <summary>
-    ///     Responds to a unary call with the message and the <see cref="StatusCode.OK" /> status.
+    ///     Responds to a unary call with the message. The status is <see cref="StatusCode.OK" /> unless
+    ///     <see cref="WithGrpcStatus" /> sets another one.
     /// </summary>
     /// <param name="response">
     ///     The response builder.
@@ -140,35 +146,180 @@ public static class WireMockGrpcExtensions
         ArgumentNullException.ThrowIfNull(response);
         ArgumentNullException.ThrowIfNull(message);
 
-        return response.WithHeader("Content-Type", ContentType)
-                       .WithTrailingHeader("grpc-status", "0")
-                       .WithBody(WriteMessage(message));
+        if (!HasStatus(response))
+        {
+            response = WithStatus(response, StatusCode.OK, null, []);
+        }
+
+        return response.WithBody(WriteMessage(message));
     }
 
     /// <summary>
-    ///     Responds to a call with a gRPC status and no message, as a service that fails the call does.
+    ///     Ends the call with a gRPC status, as a service that fails the call does.
     /// </summary>
+    /// <remarks>
+    ///     With <paramref name="details" /> the status follows the gRPC rich error model: the client reads the code,
+    ///     the message and the details as a <c>google.rpc.Status</c>, for example with <c>GetRpcStatus()</c> of the
+    ///     <c>Grpc.StatusProto</c> package.
+    /// </remarks>
     /// <param name="response">
     ///     The response builder.
     /// </param>
     /// <param name="statusCode">
     ///     The status code.
     /// </param>
-    /// <param name="detail">
-    ///     The status detail the client receives.
+    /// <param name="message">
+    ///     The status message; the client reads it from <see cref="Status.Detail" />.
+    /// </param>
+    /// <param name="details">
+    ///     The error details, for example <c>google.rpc.ErrorInfo</c> or a message of the service's own. Each one
+    ///     is packed into <see cref="Any" /> unless it already is one.
     /// </param>
     /// <returns>
     ///     The response builder.
     /// </returns>
     public static IResponseBuilder WithGrpcStatus(this IResponseBuilder response, StatusCode statusCode,
-        string? detail = null)
+        string? message = null, params IMessage[] details)
     {
         ArgumentNullException.ThrowIfNull(response);
+        ArgumentNullException.ThrowIfNull(details);
 
-        response = response.WithHeader("Content-Type", ContentType)
-                           .WithHeader("grpc-status", ((int)statusCode).ToString(CultureInfo.InvariantCulture));
+        return WithStatus(response, statusCode, message, details);
+    }
 
-        return detail is null ? response : response.WithHeader("grpc-message", Uri.EscapeDataString(detail));
+    /// <summary>
+    ///     Adds a trailer with a text value to the response; the client reads it from the trailers of the call or
+    ///     from <see cref="RpcException.Trailers" />. A trailer added twice has both values.
+    /// </summary>
+    /// <param name="response">
+    ///     The response builder.
+    /// </param>
+    /// <param name="key">
+    ///     The trailer name. It must not end with <c>-bin</c>.
+    /// </param>
+    /// <param name="value">
+    ///     The value, printable ASCII characters only.
+    /// </param>
+    /// <returns>
+    ///     The response builder.
+    /// </returns>
+    /// <exception cref="ArgumentException">
+    ///     Thrown if the name ends with <c>-bin</c> or the value has characters other than printable ASCII.
+    /// </exception>
+    public static IResponseBuilder WithGrpcTrailer(this IResponseBuilder response, string key, string value)
+    {
+        ArgumentNullException.ThrowIfNull(response);
+        ArgumentException.ThrowIfNullOrEmpty(key);
+        ArgumentNullException.ThrowIfNull(value);
+
+        if (key.EndsWith(BinarySuffix, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new ArgumentException(
+                $"The gRPC trailer '{key}' is binary: pass its value as bytes.", nameof(key));
+        }
+
+        if (value.Any(character => character is < ' ' or > '~'))
+        {
+            throw new ArgumentException(
+                $"The value of the gRPC trailer '{key}' must be printable ASCII; send other values as bytes in a " +
+                $"trailer whose name ends with '{BinarySuffix}'.", nameof(value));
+        }
+
+        return WithContentType(response).WithTrailingHeader(key, value);
+    }
+
+    /// <summary>
+    ///     Adds a trailer with a binary value to the response; the client reads it from the trailers of the call or
+    ///     from <see cref="RpcException.Trailers" />. A trailer added twice has both values.
+    /// </summary>
+    /// <param name="response">
+    ///     The response builder.
+    /// </param>
+    /// <param name="key">
+    ///     The trailer name. It must end with <c>-bin</c>.
+    /// </param>
+    /// <param name="value">
+    ///     The value; it is sent base64-encoded, as gRPC requires for binary metadata.
+    /// </param>
+    /// <returns>
+    ///     The response builder.
+    /// </returns>
+    /// <exception cref="ArgumentException">
+    ///     Thrown if the name does not end with <c>-bin</c>.
+    /// </exception>
+    public static IResponseBuilder WithGrpcTrailer(this IResponseBuilder response, string key, byte[] value)
+    {
+        ArgumentNullException.ThrowIfNull(response);
+        ArgumentException.ThrowIfNullOrEmpty(key);
+        ArgumentNullException.ThrowIfNull(value);
+
+        if (!key.EndsWith(BinarySuffix, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new ArgumentException(
+                $"The name of a binary gRPC trailer must end with '{BinarySuffix}': '{key}'.", nameof(key));
+        }
+
+        return WithContentType(response).WithTrailingHeader(key, Convert.ToBase64String(value));
+    }
+
+    private static IResponseBuilder WithContentType(IResponseBuilder response) =>
+        response.WithHeader("Content-Type", ContentType);
+
+    private static bool HasStatus(IResponseBuilder response) =>
+        response is Response { ResponseMessage.TrailingHeaders: { } trailers } && trailers.ContainsKey(StatusTrailer);
+
+    private static IResponseBuilder WithStatus(IResponseBuilder response, StatusCode statusCode, string? message,
+        IMessage[] details)
+    {
+        if (response is Response { ResponseMessage.TrailingHeaders: { } trailers })
+        {
+            trailers.Remove(StatusTrailer);
+            trailers.Remove(MessageTrailer);
+            trailers.Remove(DetailsTrailer);
+        }
+
+        response = WithContentType(response)
+            .WithTrailingHeader(StatusTrailer, ((int)statusCode).ToString(CultureInfo.InvariantCulture));
+
+        if (message is not null)
+        {
+            response = response.WithTrailingHeader(MessageTrailer, Uri.EscapeDataString(message));
+        }
+
+        return details.Length == 0
+            ? response
+            : response.WithTrailingHeader(DetailsTrailer,
+                Convert.ToBase64String(WriteStatus(statusCode, message, details)));
+    }
+
+    private static byte[] WriteStatus(StatusCode statusCode, string? message, IMessage[] details)
+    {
+        using var buffer = new MemoryStream();
+        using var output = new CodedOutputStream(buffer, true);
+
+        if (statusCode != StatusCode.OK)
+        {
+            output.WriteTag(1, WireFormat.WireType.Varint);
+            output.WriteInt32((int)statusCode);
+        }
+
+        if (!string.IsNullOrEmpty(message))
+        {
+            output.WriteTag(2, WireFormat.WireType.LengthDelimited);
+            output.WriteString(message);
+        }
+
+        foreach (var detail in details)
+        {
+            ArgumentNullException.ThrowIfNull(detail, nameof(details));
+
+            output.WriteTag(3, WireFormat.WireType.LengthDelimited);
+            output.WriteMessage(detail as Any ?? Any.Pack(detail));
+        }
+
+        output.Flush();
+
+        return buffer.ToArray();
     }
 
     private static bool TryReadMessage<TMessage>(byte[]? body, out TMessage message)
