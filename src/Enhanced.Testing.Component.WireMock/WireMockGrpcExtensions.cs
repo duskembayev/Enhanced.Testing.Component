@@ -101,6 +101,10 @@ public static class WireMockGrpcExtensions
     /// <summary>
     ///     Matches calls whose request message satisfies the predicate.
     /// </summary>
+    /// <remarks>
+    ///     A predicate that throws does not match the call. If no other stub matches it either, the status the
+    ///     client receives names the exception.
+    /// </remarks>
     /// <param name="request">
     ///     The request builder.
     /// </param>
@@ -127,7 +131,8 @@ public static class WireMockGrpcExtensions
             TryReadMessage<TRequest>(body, out var message) ? JsonFormatter.Default.Format(message) : null;
         stub.ThrowIfRequestTypeDoesNotFit();
 
-        return request.WithBody(body => TryReadMessage<TRequest>(body, out var message) && predicate(message));
+        return WithCondition(request, stub,
+            body => TryReadMessage<TRequest>(body, out var message) && predicate(message));
     }
 
     /// <summary>
@@ -350,7 +355,28 @@ public static class WireMockGrpcExtensions
         return buffer.ToArray();
     }
 
-    private static bool TryReadMessage<TMessage>(byte[]? body, out TMessage message)
+    internal static IRequestBuilder WithGrpcMessage(this IRequestBuilder request, MessageDescriptor descriptor,
+        Func<IMessage, bool> predicate)
+    {
+        var stub = GrpcStub.For(request);
+        var parser = descriptor.Parser;
+
+        stub.RequestType = descriptor.ClrType;
+        stub.ThrowIfRequestTypeDoesNotFit();
+
+        return WithCondition(request, stub,
+            body => TryReadPayload(body, out var payload) && TryParse(parser, payload) is { } message &&
+                    predicate(message));
+    }
+
+    private static IRequestBuilder WithCondition(IRequestBuilder request, GrpcStub stub, Func<byte[]?, bool> condition)
+    {
+        stub.Conditions.Add(condition);
+
+        return stub.Conditions.Count == 1 ? request.WithBody(stub.Satisfies) : request;
+    }
+
+    internal static bool TryReadMessage<TMessage>(byte[]? body, out TMessage message)
         where TMessage : IMessage<TMessage>, new()
     {
         message = new TMessage();
@@ -391,11 +417,14 @@ public static class WireMockGrpcExtensions
         return true;
     }
 
-    private static string? Format(MessageParser parser, byte[] payload)
+    private static string? Format(MessageParser parser, byte[] payload) =>
+        TryParse(parser, payload) is { } message ? JsonFormatter.Default.Format(message) : null;
+
+    private static IMessage? TryParse(MessageParser parser, byte[] payload)
     {
         try
         {
-            return JsonFormatter.Default.Format(parser.ParseFrom(payload));
+            return parser.ParseFrom(payload);
         }
         catch (InvalidProtocolBufferException)
         {

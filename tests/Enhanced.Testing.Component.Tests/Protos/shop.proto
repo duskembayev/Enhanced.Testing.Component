@@ -1,0 +1,39 @@
+syntax = "proto3";
+
+option csharp_namespace = "Enhanced.Testing.Component.Tests.Protos";
+
+package shop;
+
+import "google/protobuf/empty.proto";
+
+service Catalog {
+  rpc GetItem (GetItemRequest) returns (Item);
+  rpc FindItem (GetItemRequest) returns (Item);
+  rpc DeleteItem (DeleteItemRequest) returns (google.protobuf.Empty);
+  rpc WatchItems (GetItemRequest) returns (stream Item);
+}
+
+service Stock {
+  rpc GetStock (GetStockRequest) returns (StockLevel);
+}
+
+message GetItemRequest {
+  string id = 1;
+}
+
+message DeleteItemRequest {
+  string id = 1;
+}
+
+message Item {
+  string id = 1;
+  string name = 2;
+}
+
+message GetStockRequest {
+  string item_id = 1;
+}
+
+message StockLevel {
+  int32 quantity = 1;
+}
