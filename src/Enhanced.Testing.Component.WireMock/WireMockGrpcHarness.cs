@@ -42,8 +42,17 @@ public class WireMockGrpcHarness : WireMockHarness
         where TClient : ClientBase<TClient>
     {
         return (WireMockGrpcService<TClient>)_services.GetOrAdd(typeof(TClient),
-            static (_, harness) => new WireMockGrpcService<TClient>(harness), this);
+            static (_, harness) => new WireMockGrpcService<TClient>(harness, null), this);
     }
+
+    /// <summary>
+    ///     Begins a scope, for one test that shares the harness with others: the stubs made through the scope are
+    ///     removed when it is disposed, and it sees only the requests received since it began.
+    /// </summary>
+    /// <returns>
+    ///     The scope.
+    /// </returns>
+    public WireMockGrpcScope BeginScope() => new(this);
 
     internal int NextStub() => Interlocked.Increment(ref _stubs);
 }

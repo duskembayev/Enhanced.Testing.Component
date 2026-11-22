@@ -84,7 +84,12 @@ greeter.Fail(client => client.SayHelloAsync(new HelloRequest { Name = "nobody" }
   [Error details and trailers](#error-details-and-trailers).
 - `Requests<TRequest>()` returns the request messages the application sent, to assert on them:
   `Assert.Single(greeter.Requests<HelloRequest>(request => request.Name == "world"))`. Calls that no stub answered
-  are included. If several methods take the same request type, the requests of all of them are returned.
+  are included. If several methods take the same request type, the requests of all of them are returned; name the
+  call to get those of one method: `greeter.Requests(client => client.SayHelloAsync(null), (HelloRequest r) => ...)`.
+- `WaitForRequestAsync(call, predicate, timeout)` waits for a call the application makes later, for example after
+  it consumed a message; see [Waiting for a call](#waiting-for-a-call).
+- A predicate that throws does not match the call. If no other stub answers it, the status the client receives
+  names the exception.
 - The server listens over HTTP/2. `ServiceName`, `EndpointName` and `ConfigurationKey` work as on `WireMockHarness`;
   for a client that calls `http://_grpc.greeter`, set `EndpointName = "grpc"`.
 - The harness finds the service descriptor and creates the client through reflection, so `TClient` must be a client
@@ -100,18 +105,59 @@ greeter.Respond(client => client.SayHelloAsync(null), new HelloReply { Message =
 greeter.Respond(client => client.SayHelloAsync(new HelloRequest { Name = id }), new HelloReply { Message = "Mine" });
 ```
 
-This lets test classes share one harness without `Reset()`: the fixture sets the default answers, and a test adds a
-stub for the request it sends, with an id of its own. `Respond` and `Fail` return the stub; dispose it to remove the
-stub when a test overrides a default that other tests rely on:
+`Respond` and `Fail` return the stub; dispose it to remove the stub. Stubs added through `Server` follow WireMock's
+own rules and, unless they are given a priority, answer before the stubs of the harness.
+
+### Sharing the harness between tests
+
+When test classes share one fixture, do not call `Reset()` between tests: set the default answers in the fixture,
+and give every test a scope.
 
 ```csharp
-using var outage = greeter.Fail(client => client.SayHelloAsync(null), StatusCode.Unavailable);
+public class GreetingTests(AppFixture fixture) : IDisposable
+{
+    private readonly WireMockGrpcScope<Greeter.GreeterClient> _greeter = fixture.Greeter.BeginScope();
+
+    [Fact]
+    public async Task ShouldGreetByName()
+    {
+        var name = Guid.NewGuid().ToString();
+
+        _greeter.Respond(client => client.SayHelloAsync(new HelloRequest { Name = name }),
+            new HelloReply { Message = "Hi" });
+
+        await fixture.Http.CreateClient().PostAsync($"/greetings/{name}", null);
+
+        Assert.Single(_greeter.Requests<HelloRequest>(request => request.Name == name));
+    }
+
+    public void Dispose() => _greeter.Dispose();
+}
 ```
 
-The default answers again when the test method ends.
+- A scope has the members of the harness. The stubs made through it are removed when it is disposed; the stubs made
+  through the harness, the defaults of the fixture, stay.
+- `Requests` and `WaitForRequestAsync` of a scope see only the requests received since the scope began.
+- Stub by an id of the test's own, as above: a stub without a condition made in one test answers the calls the other
+  tests cause while it exists. Scopes of tests that run at the same time do not remove each other's stubs, but each
+  sees the requests of the others, so filter the requests by the same id.
+- The server keeps every request it received. In a long run, bound the log:
+  `ConfigureServer = settings => settings.MaxRequestLogCount = 1000`.
 
-Stubs added through `Server` follow WireMock's own rules and, unless they are given a priority, answer before the
-stubs of the harness.
+### Waiting for a call
+
+When the application calls the service later (after it consumed a message, on a timer), wait for the call instead
+of a delay:
+
+```csharp
+var request = await greeter.WaitForRequestAsync(
+    client => client.SayHelloAsync(null), (HelloRequest request) => request.Name == name, TimeSpan.FromSeconds(10));
+```
+
+It returns as soon as a matching request arrived, also one that arrived before the wait began, and throws a
+`TimeoutException` that tells how many requests of the method arrived and shows the last one. Without a predicate
+the request type cannot be inferred: write
+`WaitForRequestAsync<HelloRequest, HelloReply>(client => client.SayHelloAsync(null), timeout)`.
 
 ### Several services on one address
 

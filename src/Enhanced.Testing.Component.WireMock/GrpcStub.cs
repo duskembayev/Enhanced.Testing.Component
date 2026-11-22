@@ -15,10 +15,37 @@ internal sealed class GrpcStub
 
     public Func<byte[]?, string?>? DescribeRequest { get; set; }
 
+    public List<Func<byte[]?, bool>> Conditions { get; } = [];
+
     public static GrpcStub For(object requestBuilder) => Stubs.GetOrCreateValue(requestBuilder);
 
     public static GrpcStub? Find(object? requestMatcher) =>
         requestMatcher is not null && Stubs.TryGetValue(requestMatcher, out var stub) ? stub : null;
+
+    public bool Satisfies(byte[]? body)
+    {
+        try
+        {
+            return Conditions.TrueForAll(condition => condition(body));
+        }
+        catch (Exception)
+        {
+            return false;
+        }
+    }
+
+    public Exception? FindFailure(byte[]? body)
+    {
+        try
+        {
+            Conditions.ForEach(condition => condition(body));
+            return null;
+        }
+        catch (Exception exception)
+        {
+            return exception;
+        }
+    }
 
     public void ThrowIfRequestTypeDoesNotFit()
     {

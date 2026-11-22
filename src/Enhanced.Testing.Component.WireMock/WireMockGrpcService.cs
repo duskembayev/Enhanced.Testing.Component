@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Reflection;
 using Google.Protobuf;
 using Google.Protobuf.Reflection;
@@ -8,7 +9,8 @@ using WireMock.ResponseBuilders;
 namespace Enhanced.Testing.Component.WireMock;
 
 /// <summary>
-///     The stubs of one gRPC service of a <see cref="WireMockGrpcHarness" />.
+///     The stubs and the received requests of one gRPC service of a <see cref="WireMockGrpcHarness" />, for the
+///     whole harness or for a <see cref="WireMockGrpcScope" />.
 /// </summary>
 /// <remarks>
 ///     <para>
@@ -32,14 +34,17 @@ public sealed class WireMockGrpcService<TClient>
 {
     private const int ConditionalPriority = 1_000_000_000;
     private const int UnconditionalPriority = 2_000_000_000;
+    private static readonly TimeSpan PollInterval = TimeSpan.FromMilliseconds(20);
 
     private readonly WireMockGrpcHarness _harness;
+    private readonly WireMockGrpcScope? _scope;
     private readonly GrpcCallRecorder _recorder = new();
     private readonly TClient _client;
 
-    internal WireMockGrpcService(WireMockGrpcHarness harness)
+    internal WireMockGrpcService(WireMockGrpcHarness harness, WireMockGrpcScope? scope)
     {
         _harness = harness;
+        _scope = scope;
         Descriptor = FindDescriptor();
         _client = CreateClient(_recorder);
     }
@@ -205,7 +210,8 @@ public sealed class WireMockGrpcService<TClient>
     /// </summary>
     /// <remarks>
     ///     If several methods of the service take <typeparamref name="TRequest" />, the requests of all of them
-    ///     are returned.
+    ///     are returned; name the call to get the requests of one method. In a scope, only the requests received
+    ///     since the scope began are returned.
     /// </remarks>
     /// <typeparam name="TRequest">
     ///     The request message type.
@@ -226,6 +232,11 @@ public sealed class WireMockGrpcService<TClient>
     ///     Returns the request messages of this type that the application sent to the service and that satisfy
     ///     the predicate, in the order the server received them.
     /// </summary>
+    /// <remarks>
+    ///     If several methods of the service take <typeparamref name="TRequest" />, the requests of all of them
+    ///     are returned; name the call to get the requests of one method. In a scope, only the requests received
+    ///     since the scope began are returned.
+    /// </remarks>
     /// <param name="predicate">
     ///     The condition a request message must satisfy.
     /// </param>
@@ -243,35 +254,217 @@ public sealed class WireMockGrpcService<TClient>
     {
         ArgumentNullException.ThrowIfNull(predicate);
 
-        var paths = Descriptor.Methods
-                              .Where(method => !method.IsClientStreaming && method.InputType.ClrType == typeof(TRequest))
-                              .Select(method => $"/{Descriptor.FullName}/{method.Name}")
-                              .ToHashSet(StringComparer.Ordinal);
+        var methods = Descriptor.Methods
+                                .Where(method => !method.IsClientStreaming && method.InputType.ClrType == typeof(TRequest))
+                                .ToList();
 
-        if (paths.Count == 0)
+        if (methods.Count == 0)
         {
             throw new ArgumentException(
                 $"The gRPC service '{Descriptor.FullName}' has no unary method that takes {typeof(TRequest).Name} " +
                 $"messages. Its methods: {DescribeMethods()}.");
         }
 
-        var requests = new List<TRequest>();
+        return Sent<TRequest>(methods).Where(predicate).ToList();
+    }
 
-        var sent = _harness.Server.LogEntries
-                           .Select(entry => entry.RequestMessage)
-                           .Where(message => message is not null && paths.Contains(message.Path))
-                           .OrderBy(message => message!.DateTime);
+    /// <summary>
+    ///     Returns the request messages of the call that the application sent, in the order the server received
+    ///     them. Calls that no stub answered are included.
+    /// </summary>
+    /// <remarks>
+    ///     The request type cannot be inferred from the call: write
+    ///     <c>Requests&lt;HelloRequest, HelloReply&gt;(client => client.SayHelloAsync(null))</c>, or pass a
+    ///     predicate. In a scope, only the requests received since the scope began are returned.
+    /// </remarks>
+    /// <param name="call">
+    ///     The call, named through the client: <c>client => client.SayHelloAsync(null)</c> for every call of the
+    ///     method, or with a request message for the calls whose request equals it.
+    /// </param>
+    /// <typeparam name="TRequest">
+    ///     The request message type of the method.
+    /// </typeparam>
+    /// <typeparam name="TResponse">
+    ///     The response message type of the method.
+    /// </typeparam>
+    /// <returns>
+    ///     The request messages.
+    /// </returns>
+    /// <exception cref="ArgumentException">
+    ///     Thrown if <paramref name="call" /> does not make exactly one call of this service, or the method does
+    ///     not take <typeparamref name="TRequest" /> messages.
+    /// </exception>
+    /// <exception cref="NotSupportedException">
+    ///     Thrown if <paramref name="call" /> names a streaming method or the blocking variant of a method.
+    /// </exception>
+    public IReadOnlyList<TRequest> Requests<TRequest, TResponse>(Func<TClient, AsyncUnaryCall<TResponse>> call)
+        where TRequest : IMessage<TRequest>, new()
+        where TResponse : class, IMessage
+    {
+        return Requests<TRequest, TResponse>(call, _ => true);
+    }
 
-        foreach (var message in sent)
+    /// <summary>
+    ///     Returns the request messages of the call that the application sent and that satisfy the predicate, in
+    ///     the order the server received them.
+    /// </summary>
+    /// <remarks>
+    ///     In a scope, only the requests received since the scope began are returned.
+    /// </remarks>
+    /// <param name="call">
+    ///     The call, named through the client: <c>client => client.SayHelloAsync(null)</c>.
+    /// </param>
+    /// <param name="predicate">
+    ///     The condition a request message must satisfy.
+    /// </param>
+    /// <typeparam name="TRequest">
+    ///     The request message type of the method.
+    /// </typeparam>
+    /// <typeparam name="TResponse">
+    ///     The response message type of the method.
+    /// </typeparam>
+    /// <returns>
+    ///     The request messages.
+    /// </returns>
+    /// <exception cref="ArgumentException">
+    ///     Thrown if <paramref name="call" /> does not make exactly one call of this service, or the method does
+    ///     not take <typeparamref name="TRequest" /> messages.
+    /// </exception>
+    /// <exception cref="NotSupportedException">
+    ///     Thrown if <paramref name="call" /> names a streaming method or the blocking variant of a method.
+    /// </exception>
+    public IReadOnlyList<TRequest> Requests<TRequest, TResponse>(Func<TClient, AsyncUnaryCall<TResponse>> call,
+        Func<TRequest, bool> predicate)
+        where TRequest : IMessage<TRequest>, new()
+        where TResponse : class, IMessage
+    {
+        ArgumentNullException.ThrowIfNull(predicate);
+
+        var (method, expected) = Record<TRequest, TResponse>(call);
+
+        return Sent<TRequest>([method]).Where(request => Fits(request, expected, predicate)).ToList();
+    }
+
+    /// <summary>
+    ///     Waits until the application has sent a request of the call, and returns it. A request sent before the
+    ///     wait began counts too.
+    /// </summary>
+    /// <remarks>
+    ///     The request type cannot be inferred from the call: write
+    ///     <c>WaitForRequestAsync&lt;HelloRequest, HelloReply&gt;(client => client.SayHelloAsync(null), timeout)</c>,
+    ///     or pass a predicate. In a scope, only the requests received since the scope began count.
+    /// </remarks>
+    /// <param name="call">
+    ///     The call, named through the client: <c>client => client.SayHelloAsync(null)</c> for every call of the
+    ///     method, or with a request message for the calls whose request equals it.
+    /// </param>
+    /// <param name="timeout">
+    ///     How long to wait for the request.
+    /// </param>
+    /// <param name="cancellationToken">
+    ///     The cancellation token.
+    /// </param>
+    /// <typeparam name="TRequest">
+    ///     The request message type of the method.
+    /// </typeparam>
+    /// <typeparam name="TResponse">
+    ///     The response message type of the method.
+    /// </typeparam>
+    /// <returns>
+    ///     The first request of the call.
+    /// </returns>
+    /// <exception cref="ArgumentException">
+    ///     Thrown if <paramref name="call" /> does not make exactly one call of this service, or the method does
+    ///     not take <typeparamref name="TRequest" /> messages.
+    /// </exception>
+    /// <exception cref="NotSupportedException">
+    ///     Thrown if <paramref name="call" /> names a streaming method or the blocking variant of a method.
+    /// </exception>
+    /// <exception cref="TimeoutException">
+    ///     Thrown if no such request arrived in time. The message tells how many requests of the method arrived.
+    /// </exception>
+    public Task<TRequest> WaitForRequestAsync<TRequest, TResponse>(Func<TClient, AsyncUnaryCall<TResponse>> call,
+        TimeSpan timeout, CancellationToken cancellationToken = default)
+        where TRequest : IMessage<TRequest>, new()
+        where TResponse : class, IMessage
+    {
+        return WaitForRequestAsync<TRequest, TResponse>(call, _ => true, timeout, cancellationToken);
+    }
+
+    /// <summary>
+    ///     Waits until the application has sent a request of the call that satisfies the predicate, and returns
+    ///     it. A request sent before the wait began counts too.
+    /// </summary>
+    /// <remarks>
+    ///     In a scope, only the requests received since the scope began count.
+    /// </remarks>
+    /// <param name="call">
+    ///     The call, named through the client: <c>client => client.SayHelloAsync(null)</c>.
+    /// </param>
+    /// <param name="predicate">
+    ///     The condition the request message must satisfy.
+    /// </param>
+    /// <param name="timeout">
+    ///     How long to wait for the request.
+    /// </param>
+    /// <param name="cancellationToken">
+    ///     The cancellation token.
+    /// </param>
+    /// <typeparam name="TRequest">
+    ///     The request message type of the method.
+    /// </typeparam>
+    /// <typeparam name="TResponse">
+    ///     The response message type of the method.
+    /// </typeparam>
+    /// <returns>
+    ///     The first request of the call that satisfies the predicate.
+    /// </returns>
+    /// <exception cref="ArgumentException">
+    ///     Thrown if <paramref name="call" /> does not make exactly one call of this service, or the method does
+    ///     not take <typeparamref name="TRequest" /> messages.
+    /// </exception>
+    /// <exception cref="NotSupportedException">
+    ///     Thrown if <paramref name="call" /> names a streaming method or the blocking variant of a method.
+    /// </exception>
+    /// <exception cref="TimeoutException">
+    ///     Thrown if no such request arrived in time. The message tells how many requests of the method arrived.
+    /// </exception>
+    public async Task<TRequest> WaitForRequestAsync<TRequest, TResponse>(
+        Func<TClient, AsyncUnaryCall<TResponse>> call, Func<TRequest, bool> predicate, TimeSpan timeout,
+        CancellationToken cancellationToken = default)
+        where TRequest : IMessage<TRequest>, new()
+        where TResponse : class, IMessage
+    {
+        ArgumentNullException.ThrowIfNull(predicate);
+
+        var (method, expected) = Record<TRequest, TResponse>(call);
+        var stopwatch = Stopwatch.StartNew();
+
+        while (true)
         {
-            if (WireMockGrpcExtensions.TryReadMessage<TRequest>(message!.BodyAsBytes, out var request) &&
-                predicate(request))
-            {
-                requests.Add(request);
-            }
-        }
+            cancellationToken.ThrowIfCancellationRequested();
 
-        return requests;
+            var sent = Sent<TRequest>([method]);
+
+            foreach (var request in sent)
+            {
+                if (Fits(request, expected, predicate))
+                {
+                    return request;
+                }
+            }
+
+            if (stopwatch.Elapsed >= timeout)
+            {
+                throw new TimeoutException(
+                    $"No request of the gRPC call '{Descriptor.FullName}/{method.Name}' that satisfies the " +
+                    $"condition arrived within {timeout.TotalMilliseconds:0} ms. {sent.Count} request(s) of this " +
+                    $"method arrived{(_scope is null ? "" : " since the scope began")}" +
+                    (sent.Count == 0 ? "." : $"; the last one: {JsonFormatter.Default.Format(sent[^1])}"));
+            }
+
+            await Task.Delay(PollInterval, cancellationToken).ConfigureAwait(false);
+        }
     }
 
     private WireMockGrpcStub Stub<TResponse>(Func<TClient, AsyncUnaryCall<TResponse>> call,
@@ -307,9 +500,54 @@ public sealed class WireMockGrpcService<TClient>
         var id = Guid.NewGuid();
         var priority = (conditional ? ConditionalPriority : UnconditionalPriority) - _harness.NextStub();
 
+        var stub = new WireMockGrpcStub(server, id);
+
+        _scope?.Add(stub);
         server.Given(request).WithGuid(id).AtPriority(priority).RespondWith(response);
 
-        return new WireMockGrpcStub(server, id);
+        return stub;
+    }
+
+    private List<TRequest> Sent<TRequest>(IReadOnlyCollection<MethodDescriptor> methods)
+        where TRequest : IMessage<TRequest>, new()
+    {
+        var paths = methods.Select(method => $"/{Descriptor.FullName}/{method.Name}").ToHashSet(StringComparer.Ordinal);
+        var since = _scope?.Began ?? DateTime.MinValue;
+        var requests = new List<TRequest>();
+
+        var sent = _harness.Server.LogEntries
+                           .Select(entry => entry.RequestMessage)
+                           .Where(message => message is not null && message.DateTime >= since && paths.Contains(message.Path))
+                           .OrderBy(message => message!.DateTime);
+
+        foreach (var message in sent)
+        {
+            if (WireMockGrpcExtensions.TryReadMessage<TRequest>(message!.BodyAsBytes, out var request))
+            {
+                requests.Add(request);
+            }
+        }
+
+        return requests;
+    }
+
+    private static bool Fits<TRequest>(TRequest request, IMessage? expected, Func<TRequest, bool> predicate) =>
+        (expected is null || expected.Equals(request)) && predicate(request);
+
+    private (MethodDescriptor Method, IMessage? Request) Record<TRequest, TResponse>(
+        Func<TClient, AsyncUnaryCall<TResponse>> call)
+    {
+        var recorded = Record(call);
+
+        if (recorded.Method.InputType.ClrType != typeof(TRequest))
+        {
+            throw new ArgumentException(
+                $"The gRPC method '{Descriptor.FullName}/{recorded.Method.Name}' takes " +
+                $"'{recorded.Method.InputType.FullName}' messages ({recorded.Method.InputType.ClrType.Name}), not " +
+                $"{typeof(TRequest).Name}.");
+        }
+
+        return recorded;
     }
 
     private (MethodDescriptor Method, IMessage? Request) Record<TResponse>(

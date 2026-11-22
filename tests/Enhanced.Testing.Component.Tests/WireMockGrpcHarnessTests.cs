@@ -168,6 +168,147 @@ public class WireMockGrpcHarnessTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task ShouldReturnRequestsOfCall()
+    {
+        _catalog.Respond(client => client.GetItemAsync(null), new Item());
+        _catalog.Respond(client => client.FindItemAsync(null), new Item());
+
+        await Client.GetItemAsync(new GetItemRequest { Id = "1" });
+        await Client.FindItemAsync(new GetItemRequest { Id = "2" });
+        await Client.GetItemAsync(new GetItemRequest { Id = "3" });
+
+        var got = _catalog.Requests<GetItemRequest, Item>(client => client.GetItemAsync(null));
+        var third = _catalog.Requests(client => client.GetItemAsync(null), (GetItemRequest request) => request.Id == "3");
+        var equal = _catalog.Requests<GetItemRequest, Item>(client => client.FindItemAsync(new GetItemRequest { Id = "2" }));
+
+        Assert.Equal(["1", "3"], got.Select(request => request.Id).ToArray());
+        Assert.Equal("3", Assert.Single(third).Id);
+        Assert.Equal("2", Assert.Single(equal).Id);
+        Assert.Empty(_catalog.Requests<GetItemRequest, Item>(client => client.GetItemAsync(new GetItemRequest { Id = "2" })));
+        Assert.Throws<ArgumentException>(
+            () => _catalog.Requests<DeleteItemRequest, Item>(client => client.GetItemAsync(null)));
+    }
+
+    [Fact]
+    public async Task ShouldRemoveStubsOfScopeAndKeepDefaults()
+    {
+        _catalog.Respond(client => client.GetItemAsync(null), new Item { Name = "Default" });
+
+        using (var first = _catalog.BeginScope())
+        {
+            first.Respond(client => client.GetItemAsync(new GetItemRequest { Id = "1" }), new Item { Name = "First" });
+            first.Service<Catalog.CatalogClient>().Respond(client => client.FindItemAsync(null), new Item { Name = "Found" });
+
+            Assert.Equal("First", (await Client.GetItemAsync(new GetItemRequest { Id = "1" })).Name);
+            Assert.Equal("Found", (await Client.FindItemAsync(new GetItemRequest { Id = "1" })).Name);
+            Assert.Equal("1", Assert.Single(first.Requests<GetItemRequest, Item>(client => client.GetItemAsync(null))).Id);
+        }
+
+        using var second = _catalog.BeginScope();
+
+        Assert.Empty(second.Requests<GetItemRequest>());
+        Assert.Equal("Default", (await Client.GetItemAsync(new GetItemRequest { Id = "1" })).Name);
+        await Assert.ThrowsAsync<RpcException>(async () => await Client.FindItemAsync(new GetItemRequest { Id = "2" }));
+
+        Assert.Equal(["1", "2"], second.Requests<GetItemRequest>().Select(request => request.Id).ToArray());
+        Assert.Equal(4, _catalog.Requests<GetItemRequest>().Count);
+    }
+
+    [Fact]
+    public void ShouldRejectStubInDisposedScope()
+    {
+        var scope = _shop.BeginScope();
+        var stock = scope.Service<Stock.StockClient>();
+
+        stock.Respond(client => client.GetStockAsync(null), new StockLevel());
+        scope.Dispose();
+        scope.Dispose();
+
+        Assert.Throws<ObjectDisposedException>(
+            () => stock.Respond(client => client.GetStockAsync(null), new StockLevel()));
+        Assert.Single(_shop.Server.Mappings);
+    }
+
+    [Fact]
+    public async Task ShouldWaitForRequestThatArrivesLater()
+    {
+        _catalog.Respond(client => client.GetItemAsync(null), new Item());
+
+        var wait = _catalog.WaitForRequestAsync(
+            client => client.GetItemAsync(null), (GetItemRequest request) => request.Id == "late",
+            TimeSpan.FromSeconds(10));
+
+        await Client.GetItemAsync(new GetItemRequest { Id = "other" });
+        await Task.Delay(100);
+
+        Assert.False(wait.IsCompleted);
+
+        await Client.GetItemAsync(new GetItemRequest { Id = "late" });
+
+        Assert.Equal("late", (await wait).Id);
+    }
+
+    [Fact]
+    public async Task ShouldReturnRequestThatArrivedBeforeWait()
+    {
+        _catalog.Respond(client => client.GetItemAsync(null), new Item());
+        await Client.GetItemAsync(new GetItemRequest { Id = "early" });
+
+        var byCall = await _catalog.WaitForRequestAsync<GetItemRequest, Item>(
+            client => client.GetItemAsync(null), TimeSpan.FromSeconds(10));
+        var byRequest = await _catalog.WaitForRequestAsync<GetItemRequest, Item>(
+            client => client.GetItemAsync(new GetItemRequest { Id = "early" }), TimeSpan.FromSeconds(10));
+
+        Assert.Equal("early", byCall.Id);
+        Assert.Equal("early", byRequest.Id);
+    }
+
+    [Fact]
+    public async Task ShouldReportRequestsWhenWaitTimesOut()
+    {
+        _catalog.Respond(client => client.GetItemAsync(null), new Item());
+        await Client.GetItemAsync(new GetItemRequest { Id = "before the scope" });
+
+        using var scope = _catalog.BeginScope();
+
+        await Client.GetItemAsync(new GetItemRequest { Id = "another" });
+
+        var exception = await Assert.ThrowsAsync<TimeoutException>(() => scope.WaitForRequestAsync(
+            client => client.GetItemAsync(null), (GetItemRequest request) => request.Id == "before the scope",
+            TimeSpan.FromMilliseconds(200)));
+
+        Assert.Contains("shop.Catalog/GetItem", exception.Message);
+        Assert.Contains("200 ms", exception.Message);
+        Assert.Contains("1 request(s) of this method arrived since the scope began", exception.Message);
+        Assert.Contains("\"id\": \"another\"", exception.Message);
+
+        var none = await Assert.ThrowsAsync<TimeoutException>(() => _catalog.WaitForRequestAsync<GetItemRequest, Item>(
+            client => client.FindItemAsync(null), TimeSpan.FromMilliseconds(50)));
+
+        Assert.EndsWith("0 request(s) of this method arrived.", none.Message);
+    }
+
+    [Fact]
+    public async Task ShouldNotMatchWhenPredicateThrows()
+    {
+        _catalog.Respond(client => client.GetItemAsync(null), new Item { Name = "Default" });
+        _catalog.Respond(client => client.GetItemAsync(null),
+            (GetItemRequest request) => request.Id == "1" ? throw new InvalidOperationException("No such field") : false,
+            new Item { Name = "Never" });
+        _catalog.Respond(client => client.FindItemAsync(null),
+            (GetItemRequest _) => throw new InvalidOperationException("No such field"), new Item());
+
+        var answered = await Client.GetItemAsync(new GetItemRequest { Id = "1" });
+        var exception = await Assert.ThrowsAsync<RpcException>(
+            async () => await Client.FindItemAsync(new GetItemRequest { Id = "1" }));
+
+        Assert.Equal("Default", answered.Name);
+        Assert.Equal(StatusCode.Unimplemented, exception.StatusCode);
+        Assert.Contains("The condition of a stub threw InvalidOperationException: No such field", exception.Status.Detail);
+        Assert.Contains("\"id\": \"1\"", exception.Status.Detail);
+    }
+
+    [Fact]
     public void ShouldRejectRequestTypeThatNoMethodTakes()
     {
         var exception = Assert.Throws<ArgumentException>(() => _catalog.Requests<Item>());

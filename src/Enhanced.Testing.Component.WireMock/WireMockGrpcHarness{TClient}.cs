@@ -19,6 +19,15 @@ namespace Enhanced.Testing.Component.WireMock;
 public class WireMockGrpcHarness<TClient> : WireMockGrpcHarness
     where TClient : ClientBase<TClient>
 {
+    /// <summary>
+    ///     Begins a scope, for one test that shares the harness with others: the stubs made through the scope are
+    ///     removed when it is disposed, and it sees only the requests received since it began.
+    /// </summary>
+    /// <returns>
+    ///     The scope.
+    /// </returns>
+    public new WireMockGrpcScope<TClient> BeginScope() => new(this);
+
     /// <inheritdoc cref="WireMockGrpcService{TClient}.Respond{TResponse}(Func{TClient, AsyncUnaryCall{TResponse}}, TResponse)" />
     public WireMockGrpcStub Respond<TResponse>(Func<TClient, AsyncUnaryCall<TResponse>> call, TResponse response)
         where TResponse : class, IMessage
@@ -64,5 +73,40 @@ public class WireMockGrpcHarness<TClient> : WireMockGrpcHarness
         where TRequest : IMessage<TRequest>, new()
     {
         return Service<TClient>().Requests(predicate);
+    }
+
+    /// <inheritdoc cref="WireMockGrpcService{TClient}.Requests{TRequest, TResponse}(Func{TClient, AsyncUnaryCall{TResponse}})" />
+    public IReadOnlyList<TRequest> Requests<TRequest, TResponse>(Func<TClient, AsyncUnaryCall<TResponse>> call)
+        where TRequest : IMessage<TRequest>, new()
+        where TResponse : class, IMessage
+    {
+        return Service<TClient>().Requests<TRequest, TResponse>(call);
+    }
+
+    /// <inheritdoc cref="WireMockGrpcService{TClient}.Requests{TRequest, TResponse}(Func{TClient, AsyncUnaryCall{TResponse}}, Func{TRequest, bool})" />
+    public IReadOnlyList<TRequest> Requests<TRequest, TResponse>(Func<TClient, AsyncUnaryCall<TResponse>> call,
+        Func<TRequest, bool> predicate)
+        where TRequest : IMessage<TRequest>, new()
+        where TResponse : class, IMessage
+    {
+        return Service<TClient>().Requests(call, predicate);
+    }
+
+    /// <inheritdoc cref="WireMockGrpcService{TClient}.WaitForRequestAsync{TRequest, TResponse}(Func{TClient, AsyncUnaryCall{TResponse}}, TimeSpan, CancellationToken)" />
+    public Task<TRequest> WaitForRequestAsync<TRequest, TResponse>(Func<TClient, AsyncUnaryCall<TResponse>> call,
+        TimeSpan timeout, CancellationToken cancellationToken = default)
+        where TRequest : IMessage<TRequest>, new()
+        where TResponse : class, IMessage
+    {
+        return Service<TClient>().WaitForRequestAsync<TRequest, TResponse>(call, timeout, cancellationToken);
+    }
+
+    /// <inheritdoc cref="WireMockGrpcService{TClient}.WaitForRequestAsync{TRequest, TResponse}(Func{TClient, AsyncUnaryCall{TResponse}}, Func{TRequest, bool}, TimeSpan, CancellationToken)" />
+    public Task<TRequest> WaitForRequestAsync<TRequest, TResponse>(Func<TClient, AsyncUnaryCall<TResponse>> call,
+        Func<TRequest, bool> predicate, TimeSpan timeout, CancellationToken cancellationToken = default)
+        where TRequest : IMessage<TRequest>, new()
+        where TResponse : class, IMessage
+    {
+        return Service<TClient>().WaitForRequestAsync(call, predicate, timeout, cancellationToken);
     }
 }
