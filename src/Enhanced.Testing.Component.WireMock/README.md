@@ -63,12 +63,57 @@ of the same service listed in the application's own configuration are not remove
 
 ## Faking a gRPC service
 
-The same harness fakes a gRPC service the application calls. Set `UseHttp2`, and describe calls and responses with
-the generated message types:
+`WireMockGrpcHarness` fakes a gRPC backend the application calls. It takes the descriptors of the services from the
+generated code, and a stub names a call by its request message type:
 
 ```csharp
-var greeter = new WireMockHarness { ConfigurationKey = "Greeter:Address", UseHttp2 = true };
+var backend = new WireMockGrpcHarness(Greeter.Descriptor) { ServiceName = "greeter" };
 ```
+
+```csharp
+backend.On<HelloRequest>().Respond(new HelloReply { Message = "Hello" });
+backend.On<HelloRequest>(request => request.Name == "nobody").Fail(StatusCode.NotFound, "No such person");
+```
+
+- `On<TRequest>()` selects the calls of the method that takes `TRequest` messages; with a predicate, the calls whose
+  request satisfies it.
+- `Respond(message)` answers them with the message, and `Fail(statusCode, message, details)` fails them; the details
+  make a rich status, see [Error details and trailers](#error-details-and-trailers).
+- When several stubs fit a call, a stub with a predicate answers before a stub without one, and among equal stubs
+  the one made last answers. So a fixture can set a default answer and a test can add its own for the request it
+  sends.
+- A stub that does not fit the services throws when it is made: no method takes the request type, or the method
+  does not return messages of the response type. The message lists the methods.
+- The server listens over HTTP/2. `ServiceName`, `EndpointName` and `ConfigurationKey` work as on `WireMockHarness`;
+  for a client that calls `http://_grpc.greeter`, set `EndpointName = "grpc"`.
+- Unary methods only.
+
+### Methods that share a request type
+
+The harness can fake several services on one address: pass all their descriptors. If several methods take the same
+request type, the type of the response tells them apart. If it does not, or the call fails and so has no response,
+name the method, the service, or both:
+
+```csharp
+var shop = new WireMockGrpcHarness(Catalog.Descriptor, Stock.Descriptor) { ServiceName = "shop" };
+```
+
+```csharp
+shop.On<GetItemRequest>().Respond(new Price { Cents = 250 });
+shop.On<GetItemRequest>(nameof(Catalog.CatalogClient.FindItemAsync)).Respond(item);
+shop.On<DeleteItemRequest>(Stock.Descriptor).Respond(new Empty());
+shop.On<DeleteItemRequest>(Catalog.Descriptor, "DeleteItem", request => request.Id == id).Fail(StatusCode.NotFound);
+```
+
+The method name is the one in the `.proto` file or the one of the client, with the `Async` suffix. A call that
+several methods fit throws when the stub is made and lists them.
+
+### Stubs with WireMock's builders
+
+For what `On` does not cover (delays, scenarios, trailers, calls without generated code), describe the call and the
+response with the extensions of WireMock's own builders. They work on the server of any harness that listens over
+HTTP/2: a `WireMockGrpcHarness`, or a `WireMockHarness` with `UseHttp2 = true`. Unless they are given a priority,
+these stubs answer before the stubs made with `On`.
 
 ```csharp
 greeter.Server
