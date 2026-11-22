@@ -350,7 +350,20 @@ public static class WireMockGrpcExtensions
         return buffer.ToArray();
     }
 
-    private static bool TryReadMessage<TMessage>(byte[]? body, out TMessage message)
+    internal static IRequestBuilder WithGrpcMessage(this IRequestBuilder request, MessageDescriptor descriptor,
+        Func<IMessage, bool> predicate)
+    {
+        var stub = GrpcStub.For(request);
+        var parser = descriptor.Parser;
+
+        stub.RequestType = descriptor.ClrType;
+        stub.ThrowIfRequestTypeDoesNotFit();
+
+        return request.WithBody(body => TryReadPayload(body, out var payload) &&
+                                        TryParse(parser, payload) is { } message && predicate(message));
+    }
+
+    internal static bool TryReadMessage<TMessage>(byte[]? body, out TMessage message)
         where TMessage : IMessage<TMessage>, new()
     {
         message = new TMessage();
@@ -391,11 +404,14 @@ public static class WireMockGrpcExtensions
         return true;
     }
 
-    private static string? Format(MessageParser parser, byte[] payload)
+    private static string? Format(MessageParser parser, byte[] payload) =>
+        TryParse(parser, payload) is { } message ? JsonFormatter.Default.Format(message) : null;
+
+    private static IMessage? TryParse(MessageParser parser, byte[] payload)
     {
         try
         {
-            return JsonFormatter.Default.Format(parser.ParseFrom(payload));
+            return parser.ParseFrom(payload);
         }
         catch (InvalidProtocolBufferException)
         {
