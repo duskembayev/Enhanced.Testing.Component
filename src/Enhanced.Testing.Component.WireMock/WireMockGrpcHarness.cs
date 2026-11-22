@@ -79,7 +79,7 @@ public class WireMockGrpcHarness : WireMockHarness
     ///     The request message type of the method.
     /// </typeparam>
     /// <returns>
-    ///     The calls, to respond to or to fail.
+    ///     The calls: to respond to, to fail, or to read the requests of.
     /// </returns>
     /// <exception cref="ArgumentException">
     ///     Thrown if no unary method of the services takes <typeparamref name="TRequest" /> messages.
@@ -106,7 +106,7 @@ public class WireMockGrpcHarness : WireMockHarness
     ///     The request message type of the method.
     /// </typeparam>
     /// <returns>
-    ///     The calls, to respond to or to fail.
+    ///     The calls: to respond to, to fail, or to read the requests of.
     /// </returns>
     /// <exception cref="ArgumentException">
     ///     Thrown if no unary method of the services has this name and takes <typeparamref name="TRequest" />
@@ -135,7 +135,7 @@ public class WireMockGrpcHarness : WireMockHarness
     ///     The request message type of the method.
     /// </typeparam>
     /// <returns>
-    ///     The calls, to respond to or to fail.
+    ///     The calls: to respond to, to fail, or to read the requests of.
     /// </returns>
     /// <exception cref="ArgumentException">
     ///     Thrown if the service is not one of the harness, or none of its unary methods takes
@@ -167,7 +167,7 @@ public class WireMockGrpcHarness : WireMockHarness
     ///     The request message type of the method.
     /// </typeparam>
     /// <returns>
-    ///     The calls, to respond to or to fail.
+    ///     The calls: to respond to, to fail, or to read the requests of.
     /// </returns>
     /// <exception cref="ArgumentException">
     ///     Thrown if the service is not one of the harness, or it has no unary method with this name that takes

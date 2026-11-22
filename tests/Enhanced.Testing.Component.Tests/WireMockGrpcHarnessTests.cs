@@ -188,6 +188,84 @@ public class WireMockGrpcHarnessTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task ShouldReturnRequestsOfMethod()
+    {
+        _shop.On<GetItemRequest>("GetItem").Respond(new Item());
+        _shop.On<GetStockRequest>().Respond(new StockLevel());
+
+        await CatalogClient.GetItemAsync(new GetItemRequest { Id = "1" });
+        await StockClient.GetStockAsync(new GetStockRequest { ItemId = "2" });
+        await CatalogClient.GetItemAsync(new GetItemRequest { Id = "3" });
+        await Assert.ThrowsAsync<RpcException>(async () => await CatalogClient.FindItemAsync(new GetItemRequest { Id = "4" }));
+
+        var got = _shop.On<GetItemRequest>("GetItem").Requests();
+        var third = _shop.On<GetItemRequest>("GetItem", request => request.Id == "3").Requests();
+        var unanswered = _shop.On<GetItemRequest>(nameof(Catalog.CatalogClient.FindItemAsync)).Requests();
+
+        Assert.Equal(["1", "3"], got.Select(request => request.Id).ToArray());
+        Assert.Equal("3", Assert.Single(third).Id);
+        Assert.Equal("4", Assert.Single(unanswered).Id);
+        Assert.Equal("2", Assert.Single(_shop.On<GetStockRequest>().Requests()).ItemId);
+        Assert.Empty(_shop.On<GetItemRequest>("GetPrice").Requests());
+
+        var exception = Assert.Throws<ArgumentException>(() => _shop.On<GetItemRequest>().Requests());
+
+        Assert.Contains("Name the method or the service", exception.Message);
+    }
+
+    [Fact]
+    public async Task ShouldWaitForRequestThatArrivesLater()
+    {
+        _shop.On<GetStockRequest>().Respond(new StockLevel());
+
+        var wait = _shop.On<GetStockRequest>(request => request.ItemId == "late")
+                        .WaitForRequestAsync(TimeSpan.FromSeconds(10));
+
+        await StockClient.GetStockAsync(new GetStockRequest { ItemId = "other" });
+        await Task.Delay(100);
+
+        Assert.False(wait.IsCompleted);
+
+        await StockClient.GetStockAsync(new GetStockRequest { ItemId = "late" });
+
+        Assert.Equal("late", (await wait).ItemId);
+    }
+
+    [Fact]
+    public async Task ShouldReturnRequestThatArrivedBeforeWait()
+    {
+        _shop.On<GetStockRequest>().Respond(new StockLevel());
+        await StockClient.GetStockAsync(new GetStockRequest { ItemId = "early" });
+
+        var request = await _shop.On<GetStockRequest>().WaitForRequestAsync(TimeSpan.FromSeconds(10));
+
+        Assert.Equal("early", request.ItemId);
+    }
+
+    [Fact]
+    public async Task ShouldReportRequestsWhenWaitTimesOut()
+    {
+        _shop.On<GetStockRequest>().Respond(new StockLevel());
+        await StockClient.GetStockAsync(new GetStockRequest { ItemId = "another" });
+
+        var exception = await Assert.ThrowsAsync<TimeoutException>(
+            () => _shop.On<GetStockRequest>(request => request.ItemId == "mine")
+                       .WaitForRequestAsync(TimeSpan.FromMilliseconds(200)));
+
+        Assert.Contains("shop.Stock/GetStock", exception.Message);
+        Assert.Contains("that satisfies the condition arrived within 200 ms", exception.Message);
+        Assert.Contains("1 request(s) of this method arrived", exception.Message);
+        Assert.Contains("\"itemId\": \"another\"", exception.Message);
+
+        var none = await Assert.ThrowsAsync<TimeoutException>(
+            () => _shop.On<GetItemRequest>("GetPrice").WaitForRequestAsync(TimeSpan.FromMilliseconds(50)));
+
+        Assert.EndsWith("0 request(s) of this method arrived.", none.Message);
+        await Assert.ThrowsAsync<ArgumentException>(
+            () => _shop.On<GetItemRequest>().WaitForRequestAsync(TimeSpan.FromMilliseconds(50)));
+    }
+
+    [Fact]
     public async Task ShouldStubAgainAfterReset()
     {
         _shop.On<GetStockRequest>().Respond(new StockLevel { Quantity = 1 });

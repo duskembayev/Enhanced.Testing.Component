@@ -350,7 +350,7 @@ public static class WireMockGrpcExtensions
         return buffer.ToArray();
     }
 
-    private static bool TryReadMessage<TMessage>(byte[]? body, out TMessage message)
+    internal static bool TryReadMessage<TMessage>(byte[]? body, out TMessage message)
         where TMessage : IMessage<TMessage>, new()
     {
         message = new TMessage();

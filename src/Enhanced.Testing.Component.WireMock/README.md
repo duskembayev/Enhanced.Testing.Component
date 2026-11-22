@@ -79,6 +79,9 @@ backend.On<HelloRequest>(request => request.Name == "nobody").Fail(StatusCode.No
   request satisfies it.
 - `Respond(message)` answers them with the message, and `Fail(statusCode, message, details)` fails them; the details
   make a rich status, see [Error details and trailers](#error-details-and-trailers).
+- `Requests()` returns the request messages the application sent, to assert on them, and
+  `WaitForRequestAsync(timeout)` waits for a call the application makes later; see
+  [What the application sent](#what-the-application-sent).
 - When several stubs fit a call, a stub with a predicate answers before a stub without one, and among equal stubs
   the one made last answers. So a fixture can set a default answer and a test can add its own for the request it
   sends.
@@ -107,6 +110,31 @@ shop.On<DeleteItemRequest>(Catalog.Descriptor, "DeleteItem", request => request.
 
 The method name is the one in the `.proto` file or the one of the client, with the `Async` suffix. A call that
 several methods fit throws when the stub is made and lists them.
+
+### What the application sent
+
+```csharp
+var sent = backend.On<HelloRequest>(request => request.Name == name).Requests();
+
+Assert.Single(sent);
+```
+
+`Requests()` returns the requests of the selected calls in the order the server received them, also those that no
+stub answered. When the application makes the call later (after it consumed a message, on a timer), wait for it
+instead of a delay:
+
+```csharp
+var hello = await backend.On<HelloRequest>(request => request.Name == name)
+                         .WaitForRequestAsync(TimeSpan.FromSeconds(10));
+```
+
+It returns as soon as a matching request arrived, also one that arrived before the wait began, and throws a
+`TimeoutException` that tells how many requests of the method arrived and shows the last one.
+
+- Both need one method: if several methods take the request type, name the method or the service in `On`.
+- Tests that share the harness see each other's requests: select by an id of the test's own, as above.
+- The server keeps every request until `Reset()`. In a long run without it, bound the log:
+  `ConfigureServer = settings => settings.MaxRequestLogCount = 1000`.
 
 ### Stubs with WireMock's builders
 
