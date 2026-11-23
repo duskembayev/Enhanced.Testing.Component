@@ -101,6 +101,10 @@ public static class WireMockGrpcExtensions
     /// <summary>
     ///     Matches calls whose request message satisfies the predicate.
     /// </summary>
+    /// <remarks>
+    ///     A predicate that throws does not match the call. If no other stub matches it either, the status the
+    ///     client receives names the exception.
+    /// </remarks>
     /// <param name="request">
     ///     The request builder.
     /// </param>
@@ -127,7 +131,9 @@ public static class WireMockGrpcExtensions
             TryReadMessage<TRequest>(body, out var message) ? JsonFormatter.Default.Format(message) : null;
         stub.ThrowIfRequestTypeDoesNotFit();
 
-        return request.WithBody(body => TryReadMessage<TRequest>(body, out var message) && predicate(message));
+        stub.Conditions.Add(body => TryReadMessage<TRequest>(body, out var message) && predicate(message));
+
+        return stub.Conditions.Count == 1 ? request.WithBody(stub.Satisfies) : request;
     }
 
     /// <summary>

@@ -3,8 +3,8 @@
 [![NuGet](https://img.shields.io/nuget/v/Enhanced.Testing.Component.WireMock)](https://www.nuget.org/packages/Enhanced.Testing.Component.WireMock)
 
 A [WireMock.Net](https://github.com/WireMock-Net/WireMock.Net) harness for
-[Enhanced.Testing.Component](https://github.com/duskembayev/Enhanced.Testing.Component): fakes external HTTP APIs with an
-in-process server instead of calling real services. No Docker needed.
+[Enhanced.Testing.Component](https://github.com/duskembayev/Enhanced.Testing.Component): fakes external HTTP APIs and
+gRPC services with an in-process server instead of calling real services. No Docker needed.
 
 ```shell
 dotnet add package Enhanced.Testing.Component.WireMock
@@ -78,15 +78,21 @@ backend.On<HelloRequest>(request => request.Name == "nobody").Fail(StatusCode.No
 - `On<TRequest>()` selects the calls of the method that takes `TRequest` messages; with a predicate, the calls whose
   request satisfies it.
 - `Respond(message)` answers them with the message, and `Fail(statusCode, message, details)` fails them; the details
-  make a rich status, see [Error details and trailers](#error-details-and-trailers).
+  make a rich status, see [Error details and trailers](#error-details-and-trailers). `On` alone makes no stub.
 - `Requests()` returns the request messages the application sent, to assert on them, and
   `WaitForRequestAsync(timeout)` waits for a call the application makes later; see
   [What the application sent](#what-the-application-sent).
 - When several stubs fit a call, a stub with a predicate answers before a stub without one, and among equal stubs
   the one made last answers. So a fixture can set a default answer and a test can add its own for the request it
   sends.
+- A stub stays until `Reset()`. `Respond` and `Fail` return it; dispose it to remove it earlier, for example when
+  one test overrides a default that the other tests rely on:
+  `using var outage = backend.On<HelloRequest>().Fail(StatusCode.Unavailable);`
 - A stub that does not fit the services throws when it is made: no method takes the request type, or the method
   does not return messages of the response type. The message lists the methods.
+- A predicate should only read the request: it runs for every call of the method, also for the calls other tests
+  cause. A predicate that throws does not select the request; if no other stub answers the call, the status the
+  client receives names the exception.
 - The server listens over HTTP/2. `ServiceName`, `EndpointName` and `ConfigurationKey` work as on `WireMockHarness`;
   for a client that calls `http://_grpc.greeter`, set `EndpointName = "grpc"`.
 - Unary methods only.
@@ -108,8 +114,9 @@ shop.On<DeleteItemRequest>(Stock.Descriptor).Respond(new Empty());
 shop.On<DeleteItemRequest>(Catalog.Descriptor, "DeleteItem", request => request.Id == id).Fail(StatusCode.NotFound);
 ```
 
-The method name is the one in the `.proto` file or the one of the client, with the `Async` suffix. A call that
-several methods fit throws when the stub is made and lists them.
+The method name is the one in the `.proto` file or the one of the client, with the `Async` suffix; the full name,
+`shop.Catalog/FindItem`, is accepted too. A call that several methods fit throws when the stub is made and lists
+them.
 
 ### What the application sent
 
@@ -128,13 +135,17 @@ var hello = await backend.On<HelloRequest>(request => request.Name == name)
                          .WaitForRequestAsync(TimeSpan.FromSeconds(10));
 ```
 
-It returns as soon as a matching request arrived, also one that arrived before the wait began, and throws a
-`TimeoutException` that tells how many requests of the method arrived and shows the last one.
+It returns the first matching request in the request log, also one that arrived before the wait began, and throws
+a `TimeoutException` that tells how many requests of the method the log has and shows the last one.
+`Timeout.InfiniteTimeSpan` waits until the request arrives or the wait is cancelled.
 
 - Both need one method: if several methods take the request type, name the method or the service in `On`.
+- The server logs a request when it has produced the response. The request of a call that a stub made through
+  `Server` answers with a delay appears after the delay.
 - Tests that share the harness see each other's requests: select by an id of the test's own, as above.
 - The server keeps every request until `Reset()`. In a long run without it, bound the log:
-  `ConfigureServer = settings => settings.MaxRequestLogCount = 1000`.
+  `ConfigureServer = settings => settings.MaxRequestLogCount = 1000`. Requests that left the log are not returned.
+- A request the client compressed is not read; the timeout message counts such requests separately.
 
 ### Stubs with WireMock's builders
 

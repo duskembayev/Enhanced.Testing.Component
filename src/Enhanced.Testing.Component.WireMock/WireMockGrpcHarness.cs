@@ -96,7 +96,8 @@ public class WireMockGrpcHarness : WireMockHarness
     /// </summary>
     /// <param name="method">
     ///     The method name, as in the <c>.proto</c> file or as the client names it (with the <c>Async</c> suffix),
-    ///     for example <c>nameof(Greeter.GreeterClient.SayHelloAsync)</c>.
+    ///     for example <c>nameof(Greeter.GreeterClient.SayHelloAsync)</c>. The full name, such as
+    ///     <c>greet.Greeter/SayHello</c>, is accepted too.
     /// </param>
     /// <param name="predicate">
     ///     The condition the request message must satisfy; <see langword="null" /> selects every call of the
@@ -115,7 +116,7 @@ public class WireMockGrpcHarness : WireMockHarness
     public WireMockGrpcCall<TRequest> On<TRequest>(string method, Func<TRequest, bool>? predicate = null)
         where TRequest : IMessage<TRequest>, new()
     {
-        ArgumentException.ThrowIfNullOrEmpty(method);
+        ArgumentException.ThrowIfNullOrWhiteSpace(method);
 
         return Select(null, method, predicate);
     }
@@ -157,7 +158,8 @@ public class WireMockGrpcHarness : WireMockHarness
     /// </param>
     /// <param name="method">
     ///     The method name, as in the <c>.proto</c> file or as the client names it (with the <c>Async</c> suffix),
-    ///     for example <c>nameof(Greeter.GreeterClient.SayHelloAsync)</c>.
+    ///     for example <c>nameof(Greeter.GreeterClient.SayHelloAsync)</c>. The full name, such as
+    ///     <c>greet.Greeter/SayHello</c>, is accepted too.
     /// </param>
     /// <param name="predicate">
     ///     The condition the request message must satisfy; <see langword="null" /> selects every call of the
@@ -178,7 +180,7 @@ public class WireMockGrpcHarness : WireMockHarness
         where TRequest : IMessage<TRequest>, new()
     {
         ArgumentNullException.ThrowIfNull(service);
-        ArgumentException.ThrowIfNullOrEmpty(method);
+        ArgumentException.ThrowIfNullOrWhiteSpace(method);
 
         return Select(service, method, predicate);
     }
@@ -196,26 +198,83 @@ public class WireMockGrpcHarness : WireMockHarness
                 $"{string.Join(", ", Services.Select(known => known.FullName))}.", nameof(service));
         }
 
-        var methods = Services.Where(known => service is null || known.FullName == service.FullName)
-                              .SelectMany(known => known.Methods)
-                              .Where(candidate => !candidate.IsClientStreaming && !candidate.IsServerStreaming)
-                              .ToList();
+        var taking = Services.SelectMany(known => known.Methods)
+                             .Where(candidate => candidate.InputType.ClrType == typeof(TRequest))
+                             .Where(candidate => method is null || Named(candidate, method))
+                             .ToList();
 
-        var candidates = methods.Where(candidate => candidate.InputType.ClrType == typeof(TRequest))
-                                .Where(candidate => method is null || Named(candidate, method))
-                                .ToList();
+        var candidates = taking.Where(candidate => service is null || candidate.Service.FullName == service.FullName)
+                               .Where(Unary)
+                               .ToList();
 
-        if (candidates.Count == 0)
+        if (candidates.Count > 0)
         {
-            throw new ArgumentException(
-                $"No unary gRPC method{(method is null ? "" : $" '{method}'")} takes {typeof(TRequest).Name} " +
-                $"messages. The unary methods: {WireMockGrpcCall<TRequest>.Describe(methods)}.");
+            return new WireMockGrpcCall<TRequest>(this, candidates, predicate);
         }
 
-        return new WireMockGrpcCall<TRequest>(this, candidates, predicate);
+        var unary = Services.Where(known => service is null || known.FullName == service.FullName)
+                            .SelectMany(known => known.Methods)
+                            .Where(Unary)
+                            .ToList();
+
+        var streaming = taking.Where(candidate => !Unary(candidate)).ToList();
+        var elsewhere = taking.Where(Unary).ToList();
+
+        throw new ArgumentException(
+            $"No unary gRPC method{(method is null ? "" : $" '{method}'")}" +
+            $"{(service is null ? "" : $" of the service '{service.FullName}'")} takes {typeof(TRequest).Name} " +
+            "messages." +
+            (streaming.Count == 0
+                ? ""
+                : $" Streaming methods take them, and the harness does not stub those: " +
+                  $"{WireMockGrpcCall<TRequest>.Describe(streaming)}.") +
+            (elsewhere.Count == 0
+                ? ""
+                : $" Other services have such a method: {WireMockGrpcCall<TRequest>.Describe(elsewhere)}.") +
+            $" The unary methods{(service is null ? "" : " of the service")}: " +
+            $"{WireMockGrpcCall<TRequest>.Describe(unary)}.");
     }
 
-    private static bool Named(MethodDescriptor candidate, string method) =>
-        candidate.Name == method ||
-        (method.EndsWith(AsyncSuffix, StringComparison.Ordinal) && candidate.Name == method[..^AsyncSuffix.Length]);
+    /// <inheritdoc />
+    /// <exception cref="InvalidOperationException">
+    ///     Thrown if the server was set not to listen over HTTP/2.
+    /// </exception>
+    protected override async Task OnStart(CancellationToken cancellationToken)
+    {
+        await base.OnStart(cancellationToken).ConfigureAwait(false);
+
+        if (ListensOverHttp2)
+        {
+            return;
+        }
+
+        await OnStop(cancellationToken).ConfigureAwait(false);
+
+        throw new InvalidOperationException(
+            $"A gRPC harness must listen over HTTP/2: do not set {nameof(UseHttp2)} to false, on the harness or in " +
+            $"{nameof(ConfigureServer)}.");
+    }
+
+    private static bool Unary(MethodDescriptor method) => !method.IsClientStreaming && !method.IsServerStreaming;
+
+    private static bool Named(MethodDescriptor candidate, string method)
+    {
+        method = method.TrimStart('/');
+
+        var slash = method.LastIndexOf('/');
+
+        if (slash >= 0)
+        {
+            if (candidate.Service.FullName != method[..slash])
+            {
+                return false;
+            }
+
+            method = method[(slash + 1)..];
+        }
+
+        return candidate.Name == method ||
+               (method.EndsWith(AsyncSuffix, StringComparison.Ordinal) &&
+                candidate.Name == method[..^AsyncSuffix.Length]);
+    }
 }

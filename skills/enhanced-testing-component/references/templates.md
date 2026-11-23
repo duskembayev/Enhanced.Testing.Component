@@ -12,9 +12,9 @@ public class OrdersCollection : ICollectionFixture<OrdersFixture>;
 ```
 
 Namespaces: `Enhanced.Testing.Component` plus the package's own (`Enhanced.Testing.Component.Kafka`,
-`.PostgreSql`, `.DbContext`, `.Redis`, `.WireMock`, `.Time`, `.GrpcClient`), `System.Net.Http.Json` for
-`PostAsJsonAsync`, `Microsoft.EntityFrameworkCore` for EF Core queries, and `WireMock.RequestBuilders` and
-`WireMock.ResponseBuilders` for WireMock stubs.
+`.PostgreSql`, `.DbContext`, `.Redis`, `.WireMock`, `.Time`, `.GrpcClient`), `Grpc.Core` for `StatusCode`,
+`System.Net.Http.Json` for `PostAsJsonAsync`, `Microsoft.EntityFrameworkCore` for EF Core queries, and
+`WireMock.RequestBuilders` and `WireMock.ResponseBuilders` for WireMock stubs.
 
 ## Kafka: the app produces, the test checks
 
@@ -150,6 +150,31 @@ await fixture.Http.CreateClient().PostAsJsonAsync("/orders/42/pay", new { Amount
 
 Assert.Single(fixture.PaymentsApi.Server.LogEntries);
 ```
+
+## External gRPC service
+
+Pass the descriptors of the services from the generated code. The address goes to the application through
+`ConfigurationKey`, or through service discovery with `ServiceName` (and `EndpointName = "grpc"` for a client that
+calls `http://_grpc.payments`).
+
+```csharp
+public WireMockGrpcHarness Payments { get; } = new(PaymentService.Descriptor) { ServiceName = "payments" };
+```
+
+```csharp
+var orderId = Guid.NewGuid().ToString();
+
+fixture.Payments.On<ChargeRequest>(request => request.OrderId == orderId)
+       .Respond(new ChargeReply { Status = "charged" });
+
+await fixture.Http.CreateClient().PostAsJsonAsync($"/orders/{orderId}/pay", new { Amount = 10 });
+
+Assert.Single(fixture.Payments.On<ChargeRequest>(request => request.OrderId == orderId).Requests());
+```
+
+`Fail(StatusCode.Unavailable)` instead of `Respond` fails the call. A stub with a predicate answers before one
+without, so the fixture can set defaults (`On<ChargeRequest>().Respond(...)`) and a test can stub by its own id.
+If several methods take the same request type, name the method: `On<ChargeRequest>("Refund")`.
 
 ## Time
 

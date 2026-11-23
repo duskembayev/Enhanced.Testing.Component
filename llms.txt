@@ -1,6 +1,6 @@
 # Enhanced.Testing.Component
 
-> NuGet packages for component tests of ASP.NET Core applications: host the app in memory (WebApplicationFactory) with real PostgreSQL, Kafka and Redis containers (Testcontainers), EF Core, gRPC clients, WireMock fakes for external HTTP APIs and a fake TimeProvider. Targets .NET 8–11.
+> NuGet packages for component tests of ASP.NET Core applications: host the app in memory (WebApplicationFactory) with real PostgreSQL, Kafka and Redis containers (Testcontainers), EF Core, gRPC clients, WireMock fakes for external HTTP APIs and gRPC services and a fake TimeProvider. Targets .NET 8–11.
 
 Each package ships XML documentation next to its assembly (`<NuGet packages folder>/<package id lowercase>/<version>/lib/<tfm>/<package id>.xml`); read it for exact API signatures instead of decompiling.
 
@@ -18,7 +18,7 @@ Each package ships XML documentation next to its assembly (`<NuGet packages fold
 - [Enhanced.Testing.Component.Kafka](https://raw.githubusercontent.com/duskembayev/Enhanced.Testing.Component/main/src/Enhanced.Testing.Component.Kafka/README.md): Kafka/Redpanda, producer and consumer, waiting for messages, topics per test
 - [Enhanced.Testing.Component.Redis](https://raw.githubusercontent.com/duskembayev/Enhanced.Testing.Component/main/src/Enhanced.Testing.Component.Redis/README.md): Redis/Redis Stack, data isolation
 - [Enhanced.Testing.Component.GrpcClient](https://raw.githubusercontent.com/duskembayev/Enhanced.Testing.Component/main/src/Enhanced.Testing.Component.GrpcClient/README.md): gRPC clients
-- [Enhanced.Testing.Component.WireMock](https://raw.githubusercontent.com/duskembayev/Enhanced.Testing.Component/main/src/Enhanced.Testing.Component.WireMock/README.md): fakes for external HTTP APIs
+- [Enhanced.Testing.Component.WireMock](https://raw.githubusercontent.com/duskembayev/Enhanced.Testing.Component/main/src/Enhanced.Testing.Component.WireMock/README.md): fakes for external HTTP APIs and gRPC services
 - [Enhanced.Testing.Component.Time](https://raw.githubusercontent.com/duskembayev/Enhanced.Testing.Component/main/src/Enhanced.Testing.Component.Time/README.md): fake TimeProvider
 
 ## Guides

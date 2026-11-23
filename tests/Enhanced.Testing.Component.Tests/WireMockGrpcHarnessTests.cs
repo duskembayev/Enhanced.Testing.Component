@@ -6,6 +6,8 @@ using Google.Rpc;
 using Grpc.Core;
 using Grpc.Net.Client;
 using SampleService;
+using WireMock.RequestBuilders;
+using WireMock.ResponseBuilders;
 
 namespace Enhanced.Testing.Component.Tests;
 
@@ -90,8 +92,8 @@ public class WireMockGrpcHarnessTests : IAsyncLifetime
     [Fact]
     public async Task ShouldChooseMethodByName()
     {
-        _shop.On<GetItemRequest>("GetItem").Respond(new Item { Name = "Got" });
-        _shop.On<GetItemRequest>(nameof(Catalog.CatalogClient.FindItemAsync), request => request.Id == "1")
+        _shop.On<GetItemRequest>("shop.Catalog/GetItem").Respond(new Item { Name = "Got" });
+        _shop.On<GetItemRequest>(Catalog.Descriptor, nameof(Catalog.CatalogClient.FindItemAsync), request => request.Id == "1")
              .Respond(new Item { Name = "Found" });
         _shop.On<GetItemRequest>("GetPrice").Fail(StatusCode.NotFound, "No price");
 
@@ -128,7 +130,7 @@ public class WireMockGrpcHarnessTests : IAsyncLifetime
         Assert.Contains("shop.Catalog/GetItem(GetItemRequest) returns Item", sameMessages.Message);
         Assert.Contains("shop.Catalog/FindItem(GetItemRequest) returns Item", sameMessages.Message);
         Assert.DoesNotContain("GetPrice", sameMessages.Message);
-        Assert.Contains("Name the method or the service", sameMessages.Message);
+        Assert.EndsWith("Name the method in On.", sameMessages.Message);
 
         var withoutResponse = Assert.Throws<ArgumentException>(
             () => _shop.On<GetItemRequest>().Fail(StatusCode.NotFound));
@@ -139,6 +141,12 @@ public class WireMockGrpcHarnessTests : IAsyncLifetime
 
         Assert.Contains("shop.Catalog/DeleteItem", twoServices.Message);
         Assert.Contains("shop.Stock/DeleteItem", twoServices.Message);
+        Assert.EndsWith("Name the service in On.", twoServices.Message);
+
+        var named = Assert.Throws<ArgumentException>(
+            () => _shop.On<GetItemRequest>(Catalog.Descriptor).Fail(StatusCode.NotFound));
+
+        Assert.EndsWith("Name the method in On.", named.Message);
     }
 
     [Fact]
@@ -152,6 +160,8 @@ public class WireMockGrpcHarnessTests : IAsyncLifetime
         var streaming = Assert.Throws<ArgumentException>(() => _shop.On<WatchItemsRequest>());
 
         Assert.Contains("No unary gRPC method", streaming.Message);
+        Assert.Contains("Streaming methods take them", streaming.Message);
+        Assert.Contains("shop.Catalog/WatchItems(WatchItemsRequest)", streaming.Message);
 
         var wrongName = Assert.Throws<ArgumentException>(() => _shop.On<GetStockRequest>("GetItem"));
 
@@ -159,7 +169,9 @@ public class WireMockGrpcHarnessTests : IAsyncLifetime
 
         var wrongService = Assert.Throws<ArgumentException>(() => _shop.On<GetStockRequest>(Catalog.Descriptor));
 
-        Assert.DoesNotContain("shop.Stock", wrongService.Message);
+        Assert.Contains("of the service 'shop.Catalog'", wrongService.Message);
+        Assert.Contains("Other services have such a method: shop.Stock/GetStock", wrongService.Message);
+        Assert.Throws<ArgumentException>(() => _shop.On<GetStockRequest>(" "));
 
         var wrongResponse = Assert.Throws<ArgumentException>(() => _shop.On<GetStockRequest>().Respond(new Item()));
 
@@ -210,7 +222,7 @@ public class WireMockGrpcHarnessTests : IAsyncLifetime
 
         var exception = Assert.Throws<ArgumentException>(() => _shop.On<GetItemRequest>().Requests());
 
-        Assert.Contains("Name the method or the service", exception.Message);
+        Assert.EndsWith("Name the method in On.", exception.Message);
     }
 
     [Fact]
@@ -254,22 +266,179 @@ public class WireMockGrpcHarnessTests : IAsyncLifetime
 
         Assert.Contains("shop.Stock/GetStock", exception.Message);
         Assert.Contains("that satisfies the condition arrived within 200 ms", exception.Message);
-        Assert.Contains("1 request(s) of this method arrived", exception.Message);
+        Assert.Contains("The request log has 1 request(s) of this method", exception.Message);
         Assert.Contains("\"itemId\": \"another\"", exception.Message);
 
         var none = await Assert.ThrowsAsync<TimeoutException>(
             () => _shop.On<GetItemRequest>("GetPrice").WaitForRequestAsync(TimeSpan.FromMilliseconds(50)));
 
-        Assert.EndsWith("0 request(s) of this method arrived.", none.Message);
+        Assert.EndsWith("The request log has 0 request(s) of this method.", none.Message);
         await Assert.ThrowsAsync<ArgumentException>(
             () => _shop.On<GetItemRequest>().WaitForRequestAsync(TimeSpan.FromMilliseconds(50)));
+    }
+
+    [Fact]
+    public async Task ShouldRemoveStubWhenDisposed()
+    {
+        _shop.On<GetStockRequest>().Respond(new StockLevel { Quantity = 100 });
+
+        using (_shop.On<GetStockRequest>().Fail(StatusCode.Unavailable))
+        {
+            await Assert.ThrowsAsync<RpcException>(
+                async () => await StockClient.GetStockAsync(new GetStockRequest { ItemId = "1" }));
+        }
+
+        var stub = _shop.On<GetStockRequest>(request => request.ItemId == "1").Respond(new StockLevel { Quantity = 1 });
+
+        Assert.Equal(1, (await StockClient.GetStockAsync(new GetStockRequest { ItemId = "1" })).Quantity);
+
+        stub.Dispose();
+        stub.Dispose();
+
+        Assert.Equal(100, (await StockClient.GetStockAsync(new GetStockRequest { ItemId = "1" })).Quantity);
+    }
+
+    [Fact]
+    public async Task ShouldPreferStubMadeThroughServer()
+    {
+        _shop.On<GetStockRequest>(request => request.ItemId == "1").Respond(new StockLevel { Quantity = 1 });
+        _shop.Server
+             .Given(Request.Create().UsingGrpc(Stock.Descriptor, "GetStock"))
+             .RespondWith(Response.Create().WithGrpcMessage(new StockLevel { Quantity = 500 }));
+
+        Assert.Equal(500, (await StockClient.GetStockAsync(new GetStockRequest { ItemId = "1" })).Quantity);
+    }
+
+    [Fact]
+    public async Task ShouldNotSelectRequestWhenPredicateThrows()
+    {
+        Func<GetStockRequest, bool> throwing =
+            request => request.ItemId == "bad" ? throw new InvalidOperationException("No such field") : true;
+
+        _shop.On(throwing).Respond(new StockLevel { Quantity = 1 });
+
+        var exception = await Assert.ThrowsAsync<RpcException>(
+            async () => await StockClient.GetStockAsync(new GetStockRequest { ItemId = "bad" }));
+
+        Assert.Equal(StatusCode.Unimplemented, exception.StatusCode);
+        Assert.Contains("The condition of a stub threw InvalidOperationException: No such field", exception.Status.Detail);
+
+        await StockClient.GetStockAsync(new GetStockRequest { ItemId = "good" });
+
+        Assert.Equal("good", Assert.Single(_shop.On(throwing).Requests()).ItemId);
+
+        Func<GetStockRequest, bool> never =
+            request => request.ItemId == "bad" ? throw new InvalidOperationException("No such field") : false;
+        var timeout = await Assert.ThrowsAsync<TimeoutException>(
+            () => _shop.On(never).WaitForRequestAsync(TimeSpan.FromMilliseconds(100)));
+
+        Assert.Contains("The request log has 2 request(s) of this method", timeout.Message);
+        Assert.Contains("The condition threw InvalidOperationException for 1 of them: No such field", timeout.Message);
+    }
+
+    [Fact]
+    public async Task ShouldReportRequestsThatCannotBeRead()
+    {
+        _shop.On<GetStockRequest>().Respond(new StockLevel());
+
+        await StockClient.GetStockAsync(new GetStockRequest { ItemId = "compressed" },
+            new Metadata { { "grpc-internal-encoding-request", "gzip" } });
+
+        var exception = await Assert.ThrowsAsync<TimeoutException>(
+            () => _shop.On<GetStockRequest>().WaitForRequestAsync(TimeSpan.Zero));
+
+        Assert.Empty(_shop.On<GetStockRequest>().Requests());
+        Assert.Contains("The request log has 0 request(s) of this method and 1 more that could not be read",
+            exception.Message);
+    }
+
+    [Fact]
+    public async Task ShouldShortenRequestInTimeoutMessage()
+    {
+        _shop.On<GetStockRequest>().Respond(new StockLevel());
+        await StockClient.GetStockAsync(new GetStockRequest { ItemId = new string('ж', 5000) });
+
+        var exception = await Assert.ThrowsAsync<TimeoutException>(
+            () => _shop.On<GetStockRequest>(request => request.ItemId == "mine").WaitForRequestAsync(TimeSpan.Zero));
+
+        Assert.InRange(exception.Message.Length, 500, 800);
+        Assert.Equal(5000, Assert.Single(_shop.On<GetStockRequest>().Requests()).ItemId.Length);
+    }
+
+    [Fact]
+    public async Task ShouldWaitWithoutLimitUntilCancelled()
+    {
+        _shop.On<GetStockRequest>().Respond(new StockLevel());
+
+        using var cancellation = new CancellationTokenSource();
+        var cancelled = _shop.On<GetStockRequest>(request => request.ItemId == "never")
+                             .WaitForRequestAsync(Timeout.InfiniteTimeSpan, cancellation.Token);
+        var wait = _shop.On<GetStockRequest>(request => request.ItemId == "late")
+                        .WaitForRequestAsync(Timeout.InfiniteTimeSpan);
+
+        await Task.Delay(100);
+
+        Assert.False(cancelled.IsCompleted);
+        Assert.False(wait.IsCompleted);
+
+        cancellation.Cancel();
+        await StockClient.GetStockAsync(new GetStockRequest { ItemId = "late" });
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => cancelled);
+        Assert.Equal("late", (await wait).ItemId);
+        Assert.Equal("late", (await _shop.On<GetStockRequest>().WaitForRequestAsync(TimeSpan.Zero)).ItemId);
+        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(
+            () => _shop.On<GetStockRequest>().WaitForRequestAsync(TimeSpan.FromSeconds(-5)));
+    }
+
+    [Fact]
+    public void ShouldRejectStubThatCannotWork()
+    {
+        var exception = Assert.Throws<ArgumentException>(() => _shop.On<GetStockRequest>().Fail(StatusCode.OK));
+
+        Assert.Contains("Respond", exception.Message);
+        Assert.Throws<ArgumentNullException>(() => _shop.On<GetStockRequest>().Respond(null!));
+        Assert.Throws<ArgumentNullException>(() => _shop.On<GetStockRequest>().Fail(StatusCode.NotFound, "x", null!));
+        Assert.Throws<ArgumentNullException>(() => _shop.On<GetStockRequest>((Google.Protobuf.Reflection.ServiceDescriptor)null!));
+        Assert.Single(_shop.Server.Mappings);
+    }
+
+    [Fact]
+    public async Task ShouldRejectServerThatDoesNotListenOverHttp2()
+    {
+        var byProperty = new WireMockGrpcHarness(Stock.Descriptor) { UseHttp2 = false };
+        var bySettings = new WireMockGrpcHarness(Stock.Descriptor) { ConfigureServer = settings => settings.UseHttp2 = false };
+
+        foreach (var harness in new[] { byProperty, bySettings })
+        {
+            var component = ComponentBuilder.Create<Program>().AddHarness(harness).Build();
+
+            var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => component.StartAsync(default));
+
+            Assert.Contains("HTTP/2", exception.Message);
+        }
+    }
+
+    [Fact]
+    public async Task ShouldKeepTextThatIsNotAscii()
+    {
+        _shop.On<GetStockRequest>(request => request.ItemId == "Zoë").Fail(StatusCode.NotFound, "Нет такого товара: Zoë");
+
+        var exception = await Assert.ThrowsAsync<RpcException>(
+            async () => await StockClient.GetStockAsync(new GetStockRequest { ItemId = "Zoë" }));
+
+        Assert.Equal("Нет такого товара: Zoë", exception.Status.Detail);
+        Assert.Equal("Zoë", Assert.Single(_shop.On<GetStockRequest>().Requests()).ItemId);
     }
 
     [Fact]
     public async Task ShouldStubAgainAfterReset()
     {
         _shop.On<GetStockRequest>().Respond(new StockLevel { Quantity = 1 });
+        await StockClient.GetStockAsync(new GetStockRequest { ItemId = "0" });
         _shop.Reset();
+
+        Assert.Empty(_shop.On<GetStockRequest>().Requests());
 
         await Assert.ThrowsAsync<RpcException>(
             async () => await StockClient.GetStockAsync(new GetStockRequest { ItemId = "1" }));
