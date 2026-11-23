@@ -12,9 +12,9 @@ public class OrdersCollection : ICollectionFixture<OrdersFixture>;
 ```
 
 Namespaces: `Enhanced.Testing.Component` plus the package's own (`Enhanced.Testing.Component.Kafka`,
-`.PostgreSql`, `.DbContext`, `.Redis`, `.WireMock`, `.Time`, `.GrpcClient`), `Grpc.Core` for `StatusCode`,
-`System.Net.Http.Json` for `PostAsJsonAsync`, `Microsoft.EntityFrameworkCore` for EF Core queries, and
-`WireMock.RequestBuilders` and `WireMock.ResponseBuilders` for WireMock stubs.
+`.PostgreSql`, `.DbContext`, `.Redis`, `.WireMock`, `.Time`, `.GrpcClient`), `System.Net.Http.Json` for
+`PostAsJsonAsync`, `Microsoft.EntityFrameworkCore` for EF Core queries, `WireMock.RequestBuilders` and
+`WireMock.ResponseBuilders` for WireMock stubs, and `Grpc.Core` for `StatusCode`.
 
 ## Kafka: the app produces, the test checks
 
@@ -151,15 +151,26 @@ await fixture.Http.CreateClient().PostAsJsonAsync("/orders/42/pay", new { Amount
 Assert.Single(fixture.PaymentsApi.Server.LogEntries);
 ```
 
+If the app finds the API through service discovery (`Microsoft.Extensions.ServiceDiscovery`), name the service
+instead of the configuration key. The app's client must call `http://payments` or `https+http://payments`; the fake
+speaks plain HTTP, so `https://payments` does not reach it.
+
+```csharp
+public WireMockHarness PaymentsApi { get; } = new() { ServiceName = "payments" };
+```
+
+For a named endpoint, such as `http://_api.payments`, also set `EndpointName = "api"`.
+
 ## External gRPC service
 
-Pass the descriptors of the services from the generated code. The address goes to the application through
-`ConfigurationKey`, or through service discovery with `ServiceName` (and `EndpointName = "grpc"` for a client that
-calls `http://_grpc.payments`).
+Pass the descriptors of the services from the generated code. The harness listens over HTTP/2 and does not answer
+HTTP/1.1 requests, so keep it apart from the harness for HTTP APIs.
 
 ```csharp
 public WireMockGrpcHarness Payments { get; } = new(PaymentService.Descriptor) { ServiceName = "payments" };
 ```
+
+Point the application's gRPC client at `http://payments`, or pass the address through `ConfigurationKey`.
 
 ```csharp
 var orderId = Guid.NewGuid().ToString();
@@ -172,9 +183,20 @@ await fixture.Http.CreateClient().PostAsJsonAsync($"/orders/{orderId}/pay", new 
 Assert.Single(fixture.Payments.On<ChargeRequest>(request => request.OrderId == orderId).Requests());
 ```
 
-`Fail(StatusCode.Unavailable)` instead of `Respond` fails the call. A stub with a predicate answers before one
-without, so the fixture can set defaults (`On<ChargeRequest>().Respond(...)`) and a test can stub by its own id.
-If several methods take the same request type, name the method: `On<ChargeRequest>("Refund")`.
+- `On<TRequest>()` without a predicate selects every call of the method. A stub with a predicate answers before one
+  without, so the fixture can set defaults and a test can stub by an id of its own.
+- `Fail(StatusCode.Unavailable, "Try later")` instead of `Respond` fails the call; error details of a rich status
+  go after the message: `Fail(code, message, new ErrorInfo { Reason = "..." })`.
+- `Respond` and `Fail` return the stub; dispose it to remove a stub that overrides a default for one test.
+- If several methods take the same request type, name the method or the service: `On<ChargeRequest>("Refund")`,
+  `On<ChargeRequest>(PaymentService.Descriptor)`.
+- When the application calls the service later (after it consumed a message), wait for the call:
+  `await fixture.Payments.On<ChargeRequest>(r => r.OrderId == orderId).WaitForRequestAsync(TimeSpan.FromSeconds(10))`.
+- A call that no stub matches fails in the app with `Unimplemented`, and the status message shows the request and
+  tells whether the method has stubs.
+- Unary methods only. For delays, scenarios and trailers, stub through `Payments.Server` with WireMock's builders:
+  `Request.Create().UsingGrpc(PaymentService.Descriptor, nameof(PaymentService.PaymentServiceClient.ChargeAsync))`
+  and `Response.Create().WithGrpcMessage(reply)`, `WithGrpcStatus(...)`, `WithGrpcTrailer(key, value)`.
 
 ## Time
 

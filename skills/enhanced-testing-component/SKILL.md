@@ -2,7 +2,7 @@
 name: enhanced-testing-component
 description: Write and fix component (integration) tests for ASP.NET Core applications with the Enhanced.Testing.Component NuGet packages - hosting the app in memory with real PostgreSQL, Kafka or Redis containers (Testcontainers), EF Core, gRPC, WireMock fakes for external HTTP APIs and gRPC services and a fake TimeProvider. Use when a project references Enhanced.Testing.Component*, when asked to add component/integration tests for an ASP.NET Core service with databases, message brokers or caches, or when such tests are slow, flaky or fail to start.
 license: MIT
-compatibility: Enhanced.Testing.Component 1.5 or later. Requires the .NET SDK. PostgreSQL, Kafka, Redpanda and Redis harnesses need a running Docker daemon.
+compatibility: Enhanced.Testing.Component 1.6 or later. Requires the .NET SDK. PostgreSQL, Kafka, Redpanda and Redis harnesses need a running Docker daemon.
 ---
 
 # Enhanced.Testing.Component
@@ -28,11 +28,11 @@ connection strings into the app's configuration, and stops and removes everythin
 
 All packages target .NET 8–11. Container harnesses need Docker; the others don't.
 
-This skill describes version 1.5 and later. Earlier versions lack several APIs used here: `WireMockGrpcHarness`
-before 1.7; `ServiceName` on `WireMockHarness` before 1.6; `ReadToEndAsync` and `WaitForAssignmentAsync` before 1.5;
-the Time and WireMock packages, `WaitForKeyAsync`/`WaitForMessageAsync`, topics per test and template databases
-before 1.4. If the project references an older version, suggest upgrading or check the API in the installed
-package's XML documentation.
+This skill describes version 1.6 and later. Earlier versions lack several APIs used here: `WireMockGrpcHarness`
+before 1.7; gRPC stubs, `UseHttp2` and `ServiceName` of `WireMockHarness` before 1.6; `ReadToEndAsync` and
+`WaitForAssignmentAsync` before 1.5; the Time and WireMock packages, `WaitForKeyAsync`/`WaitForMessageAsync`, topics
+per test and template databases before 1.4. If the project references an older version, suggest upgrading or check
+the API in the installed package's XML documentation.
 
 ## Set up a test project
 
@@ -42,8 +42,9 @@ package's XML documentation.
    `public partial class Program;` at the end of `Program.cs` or `<InternalsVisibleTo Include="MyApp.Tests" />` to the
    app's project file.
 3. Find how the app reads each dependency's address (`ConnectionStrings:X`, `builder.Configuration["X"]`) and use that
-   name in the harness (`ConnectionName = "X"` for containers, `ConfigurationKey = "X"` for WireMock). Don't add
-   test-only code to the app.
+   name in the harness (`ConnectionName = "X"` for containers, `ConfigurationKey = "X"` for WireMock). If the app
+   finds a service through service discovery (`http://payments`, `https+http://payments`), give the WireMock harness
+   that name instead: `ServiceName = "payments"`. Don't add test-only code to the app.
 4. Write one fixture for the test project and share it between all test classes through a collection
    (`ICollectionFixture<T>`). `IClassFixture<T>` starts new containers and a new application for every test class,
    also when it is put on the collection definition; use it only for a single class that needs its own application
@@ -97,7 +98,7 @@ This is the xUnit v2 shape; in xUnit v3 `InitializeAsync`/`DisposeAsync` return 
 `[assembly: AssemblyFixture(typeof(OrdersFixture))]` shares the fixture without a collection. For other frameworks,
 call `StartAsync`/`StopAsync` from the assembly setup and teardown.
 
-More templates (Kafka, Redis, WireMock, external gRPC services, time, gRPC): [references/templates.md](references/templates.md).
+More templates (Kafka, Redis, external HTTP and gRPC services, time, gRPC): [references/templates.md](references/templates.md).
 
 ## Rules
 
@@ -115,9 +116,10 @@ More templates (Kafka, Redis, WireMock, external gRPC services, time, gRPC): [re
 - **Control time instead of waiting.** If the app waits on timeouts, retries or timers, inject `TimeProvider` in the
   app and use `TimeProviderHarness` + `Advance(...)` in tests.
 - **Fake external HTTP APIs** with `WireMockHarness`; call `Reset()` between tests that share it.
-- **Fake external gRPC services** with `WireMockGrpcHarness` instead of mocking the generated client in the
+- **Fake external gRPC services** with `WireMockGrpcHarness`, instead of mocking the generated client inside the
   application: `backend.On<HelloRequest>(r => r.Name == name).Respond(reply)`. Assert on what the application sent
-  with `.Requests()`, and wait for a later call with `.WaitForRequestAsync(timeout)`.
+  with `.Requests()`, and wait for a later call with `.WaitForRequestAsync(timeout)`. It does not answer HTTP/1.1,
+  so use a separate `WireMockHarness` for HTTP APIs.
 - **Remove background work the test doesn't need** with `ComponentBuilder.Create<Program>().RemoveHostedService<T>()`.
 - **Don't rely on a fresh application.** Tests share the app and everything registered in it: use unique ids per
   test, reset mocks and `WireMockHarness` before a test that configures or counts calls, and never assume an empty
