@@ -13,8 +13,8 @@ public class OrdersCollection : ICollectionFixture<OrdersFixture>;
 
 Namespaces: `Enhanced.Testing.Component` plus the package's own (`Enhanced.Testing.Component.Kafka`,
 `.PostgreSql`, `.DbContext`, `.Redis`, `.WireMock`, `.Time`, `.GrpcClient`), `System.Net.Http.Json` for
-`PostAsJsonAsync`, `Microsoft.EntityFrameworkCore` for EF Core queries, and `WireMock.RequestBuilders` and
-`WireMock.ResponseBuilders` for WireMock stubs.
+`PostAsJsonAsync`, `Microsoft.EntityFrameworkCore` for EF Core queries, `WireMock.RequestBuilders` and
+`WireMock.ResponseBuilders` for WireMock stubs, and `Grpc.Core` for `StatusCode`.
 
 ## Kafka: the app produces, the test checks
 
@@ -150,6 +150,48 @@ await fixture.Http.CreateClient().PostAsJsonAsync("/orders/42/pay", new { Amount
 
 Assert.Single(fixture.PaymentsApi.Server.LogEntries);
 ```
+
+If the app finds the API through service discovery (`Microsoft.Extensions.ServiceDiscovery`), name the service
+instead of the configuration key. The app's client must call `http://payments` or `https+http://payments`; the fake
+speaks plain HTTP, so `https://payments` does not reach it.
+
+```csharp
+public WireMockHarness PaymentsApi { get; } = new() { ServiceName = "payments" };
+```
+
+For a named endpoint, such as `http://_api.payments`, also set `EndpointName = "api"`.
+
+## External gRPC service
+
+Use a separate `WireMockHarness` with `UseHttp2 = true`; it does not answer HTTP/1.1 requests. Describe the call
+and the answer with the generated types, so the `.proto` text and `WireMock.Net.ProtoBuf` are not needed.
+
+```csharp
+public WireMockHarness Payments { get; } = new() { ServiceName = "payments", UseHttp2 = true };
+```
+
+Point the application's gRPC client at `http://payments`, or pass the address through `ConfigurationKey`.
+
+```csharp
+var orderId = Guid.NewGuid().ToString();
+
+fixture.Payments.Server
+       .Given(Request.Create()
+                     .UsingGrpc(PaymentService.Descriptor, nameof(PaymentService.PaymentServiceClient.ChargeAsync))
+                     .WithGrpcMessage<ChargeRequest>(request => request.OrderId == orderId))
+       .RespondWith(Response.Create().WithGrpcMessage(new ChargeReply { Status = "charged" }));
+
+await fixture.Http.CreateClient().PostAsJsonAsync($"/orders/{orderId}/pay", new { Amount = 10 });
+```
+
+- Leave `WithGrpcMessage<TRequest>(...)` out to answer every call of the method.
+- To fail the call, respond with `WithGrpcStatus(StatusCode.Unavailable, "Try later")`. Error details of a rich
+  status go after the message: `WithGrpcStatus(code, message, new ErrorInfo { Reason = "..." })`;
+  `WithGrpcTrailer(key, value)` adds a trailer.
+- Stub by an id of the test's own, as above, when tests share the harness.
+- A call that no stub matches fails in the app with `Unimplemented`, and the status message shows the request and
+  tells whether the method has stubs.
+- Unary methods only.
 
 ## Time
 

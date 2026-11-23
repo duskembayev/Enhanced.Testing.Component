@@ -95,7 +95,7 @@ for a fixture with PostgreSQL, Kafka, Redis and gRPC.
 | [`Enhanced.Testing.Component.Kafka`](https://github.com/duskembayev/Enhanced.Testing.Component/blob/main/src/Enhanced.Testing.Component.Kafka/README.md) | Kafka (native, Confluent) or Redpanda, producer and consumer harnesses, per-test topics | [![NuGet](https://img.shields.io/nuget/v/Enhanced.Testing.Component.Kafka)](https://www.nuget.org/packages/Enhanced.Testing.Component.Kafka) |
 | [`Enhanced.Testing.Component.Redis`](https://github.com/duskembayev/Enhanced.Testing.Component/blob/main/src/Enhanced.Testing.Component.Redis/README.md) | Redis or Redis Stack, direct database access, per-test databases | [![NuGet](https://img.shields.io/nuget/v/Enhanced.Testing.Component.Redis)](https://www.nuget.org/packages/Enhanced.Testing.Component.Redis) |
 | [`Enhanced.Testing.Component.GrpcClient`](https://github.com/duskembayev/Enhanced.Testing.Component/blob/main/src/Enhanced.Testing.Component.GrpcClient/README.md) | gRPC clients that call the application in memory | [![NuGet](https://img.shields.io/nuget/v/Enhanced.Testing.Component.GrpcClient)](https://www.nuget.org/packages/Enhanced.Testing.Component.GrpcClient) |
-| [`Enhanced.Testing.Component.WireMock`](https://github.com/duskembayev/Enhanced.Testing.Component/blob/main/src/Enhanced.Testing.Component.WireMock/README.md) | In-process fakes for external HTTP APIs | [![NuGet](https://img.shields.io/nuget/v/Enhanced.Testing.Component.WireMock)](https://www.nuget.org/packages/Enhanced.Testing.Component.WireMock) |
+| [`Enhanced.Testing.Component.WireMock`](https://github.com/duskembayev/Enhanced.Testing.Component/blob/main/src/Enhanced.Testing.Component.WireMock/README.md) | In-process fakes for external HTTP APIs and gRPC services | [![NuGet](https://img.shields.io/nuget/v/Enhanced.Testing.Component.WireMock)](https://www.nuget.org/packages/Enhanced.Testing.Component.WireMock) |
 | [`Enhanced.Testing.Component.Time`](https://github.com/duskembayev/Enhanced.Testing.Component/blob/main/src/Enhanced.Testing.Component.Time/README.md) | A fake `TimeProvider` the test controls | [![NuGet](https://img.shields.io/nuget/v/Enhanced.Testing.Component.Time)](https://www.nuget.org/packages/Enhanced.Testing.Component.Time) |
 
 ## Features
@@ -112,7 +112,7 @@ Each package has its own README with examples, which is also shown on nuget.org:
   application's database, template databases, non-durable defaults.
 - **[Redis](https://github.com/duskembayev/Enhanced.Testing.Component/blob/main/src/Enhanced.Testing.Component.Redis/README.md)**: direct database access, a database per fixture,
   flushing test data.
-- **[External HTTP APIs](https://github.com/duskembayev/Enhanced.Testing.Component/blob/main/src/Enhanced.Testing.Component.WireMock/README.md)** and
+- **[External HTTP APIs and gRPC services](https://github.com/duskembayev/Enhanced.Testing.Component/blob/main/src/Enhanced.Testing.Component.WireMock/README.md)** and
   **[time](https://github.com/duskembayev/Enhanced.Testing.Component/blob/main/src/Enhanced.Testing.Component.Time/README.md)**: WireMock stubs and a fake `TimeProvider` for timeouts,
   retries and timers.
 - **[gRPC](https://github.com/duskembayev/Enhanced.Testing.Component/blob/main/src/Enhanced.Testing.Component.GrpcClient/README.md)**: generated clients that call the application in

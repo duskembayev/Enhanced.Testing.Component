@@ -3,8 +3,8 @@
 [![NuGet](https://img.shields.io/nuget/v/Enhanced.Testing.Component.WireMock)](https://www.nuget.org/packages/Enhanced.Testing.Component.WireMock)
 
 A [WireMock.Net](https://github.com/WireMock-Net/WireMock.Net) harness for
-[Enhanced.Testing.Component](https://github.com/duskembayev/Enhanced.Testing.Component): fakes external HTTP APIs with an
-in-process server instead of calling real services. No Docker needed.
+[Enhanced.Testing.Component](https://github.com/duskembayev/Enhanced.Testing.Component): fakes external HTTP APIs and
+gRPC services with an in-process server instead of calling real services. No Docker needed.
 
 ```shell
 dotnet add package Enhanced.Testing.Component.WireMock
