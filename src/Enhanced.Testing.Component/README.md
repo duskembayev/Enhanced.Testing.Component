@@ -124,5 +124,5 @@ module. See [Writing a custom harness](https://github.com/duskembayev/Enhanced.T
 | [Enhanced.Testing.Component.Kafka](https://github.com/duskembayev/Enhanced.Testing.Component/blob/main/src/Enhanced.Testing.Component.Kafka/README.md) | Kafka or Redpanda, producer and consumer |
 | [Enhanced.Testing.Component.Redis](https://github.com/duskembayev/Enhanced.Testing.Component/blob/main/src/Enhanced.Testing.Component.Redis/README.md) | Redis or Redis Stack |
 | [Enhanced.Testing.Component.GrpcClient](https://github.com/duskembayev/Enhanced.Testing.Component/blob/main/src/Enhanced.Testing.Component.GrpcClient/README.md) | gRPC clients |
-| [Enhanced.Testing.Component.WireMock](https://github.com/duskembayev/Enhanced.Testing.Component/blob/main/src/Enhanced.Testing.Component.WireMock/README.md) | Fakes for external HTTP APIs |
+| [Enhanced.Testing.Component.WireMock](https://github.com/duskembayev/Enhanced.Testing.Component/blob/main/src/Enhanced.Testing.Component.WireMock/README.md) | Fakes for external HTTP APIs and gRPC services |
 | [Enhanced.Testing.Component.Time](https://github.com/duskembayev/Enhanced.Testing.Component/blob/main/src/Enhanced.Testing.Component.Time/README.md) | Fake `TimeProvider` |
