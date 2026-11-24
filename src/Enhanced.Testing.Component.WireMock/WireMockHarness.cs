@@ -132,6 +132,8 @@ public class WireMockHarness : Harness
         ExplainUnmatchedGrpcCalls();
     }
 
+    internal bool ListensOverHttp2 => _explainsGrpcCalls;
+
     private void ExplainUnmatchedGrpcCalls()
     {
         if (_explainsGrpcCalls && _server is not null)

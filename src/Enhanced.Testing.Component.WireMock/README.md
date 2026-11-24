@@ -63,12 +63,96 @@ of the same service listed in the application's own configuration are not remove
 
 ## Faking a gRPC service
 
-The same harness fakes a gRPC service the application calls. Set `UseHttp2`, and describe calls and responses with
-the generated message types:
+`WireMockGrpcHarness` fakes a gRPC backend the application calls. It takes the descriptors of the services from the
+generated code, and a stub names a call by its request message type:
 
 ```csharp
-var greeter = new WireMockHarness { ConfigurationKey = "Greeter:Address", UseHttp2 = true };
+var backend = new WireMockGrpcHarness(Greeter.Descriptor) { ServiceName = "greeter" };
 ```
+
+```csharp
+backend.On<HelloRequest>().Respond(new HelloReply { Message = "Hello" });
+backend.On<HelloRequest>(request => request.Name == "nobody").Fail(StatusCode.NotFound, "No such person");
+```
+
+- `On<TRequest>()` selects the calls of the method that takes `TRequest` messages; with a predicate, the calls whose
+  request satisfies it.
+- `Respond(message)` answers them with the message, and `Fail(statusCode, message, details)` fails them; the details
+  make a rich status, see [Error details and trailers](#error-details-and-trailers). `On` alone makes no stub.
+- `Requests()` returns the request messages the application sent, to assert on them, and
+  `WaitForRequestAsync(timeout)` waits for a call the application makes later; see
+  [What the application sent](#what-the-application-sent).
+- When several stubs fit a call, a stub with a predicate answers before a stub without one, and among equal stubs
+  the one made last answers. So a fixture can set a default answer and a test can add its own for the request it
+  sends.
+- A stub stays until `Reset()`. `Respond` and `Fail` return it; dispose it to remove it earlier, for example when
+  one test overrides a default that the other tests rely on:
+  `using var outage = backend.On<HelloRequest>().Fail(StatusCode.Unavailable);`
+- A stub that does not fit the services throws when it is made: no method takes the request type, or the method
+  does not return messages of the response type. The message lists the methods.
+- A predicate should only read the request: it runs for every call of the method, also for the calls other tests
+  cause. A predicate that throws does not select the request; if no other stub answers the call, the status the
+  client receives names the exception.
+- The server listens over HTTP/2. `ServiceName`, `EndpointName` and `ConfigurationKey` work as on `WireMockHarness`;
+  for a client that calls `http://_grpc.greeter`, set `EndpointName = "grpc"`.
+- Unary methods only.
+
+### Methods that share a request type
+
+The harness can fake several services on one address: pass all their descriptors. If several methods take the same
+request type, the type of the response tells them apart. If it does not, or the call fails and so has no response,
+name the method, the service, or both:
+
+```csharp
+var shop = new WireMockGrpcHarness(Catalog.Descriptor, Stock.Descriptor) { ServiceName = "shop" };
+```
+
+```csharp
+shop.On<GetItemRequest>().Respond(new Price { Cents = 250 });
+shop.On<GetItemRequest>(nameof(Catalog.CatalogClient.FindItemAsync)).Respond(item);
+shop.On<DeleteItemRequest>(Stock.Descriptor).Respond(new Empty());
+shop.On<DeleteItemRequest>(Catalog.Descriptor, "DeleteItem", request => request.Id == id).Fail(StatusCode.NotFound);
+```
+
+The method name is the one in the `.proto` file or the one of the client, with the `Async` suffix; the full name,
+`shop.Catalog/FindItem`, is accepted too. A call that several methods fit throws when the stub is made and lists
+them.
+
+### What the application sent
+
+```csharp
+var sent = backend.On<HelloRequest>(request => request.Name == name).Requests();
+
+Assert.Single(sent);
+```
+
+`Requests()` returns the requests of the selected calls in the order the server received them, also those that no
+stub answered. When the application makes the call later (after it consumed a message, on a timer), wait for it
+instead of a delay:
+
+```csharp
+var hello = await backend.On<HelloRequest>(request => request.Name == name)
+                         .WaitForRequestAsync(TimeSpan.FromSeconds(10));
+```
+
+It returns the first matching request in the request log, also one that arrived before the wait began, and throws
+a `TimeoutException` that tells how many requests of the method the log has and shows the last one.
+`Timeout.InfiniteTimeSpan` waits until the request arrives or the wait is cancelled.
+
+- Both need one method: if several methods take the request type, name the method or the service in `On`.
+- The server logs a request when it has produced the response. The request of a call that a stub made through
+  `Server` answers with a delay appears after the delay.
+- Tests that share the harness see each other's requests: select by an id of the test's own, as above.
+- The server keeps every request until `Reset()`. In a long run without it, bound the log:
+  `ConfigureServer = settings => settings.MaxRequestLogCount = 1000`. Requests that left the log are not returned.
+- A request the client compressed is not read; the timeout message counts such requests separately.
+
+### Stubs with WireMock's builders
+
+For what `On` does not cover (delays, scenarios, trailers, calls without generated code), describe the call and the
+response with the extensions of WireMock's own builders. They work on the server of any harness that listens over
+HTTP/2: a `WireMockGrpcHarness`, or a `WireMockHarness` with `UseHttp2 = true`. Unless they are given a priority,
+these stubs answer before the stubs made with `On`.
 
 ```csharp
 greeter.Server

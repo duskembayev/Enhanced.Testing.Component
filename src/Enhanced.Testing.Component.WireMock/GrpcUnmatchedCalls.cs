@@ -44,8 +44,15 @@ internal static class GrpcUnmatchedCalls
             var message = ofMethod.Select(stub => stub.DescribeRequest?.Invoke(request.BodyAsBytes))
                                   .FirstOrDefault(description => description is not null);
 
+            var failure = ofMethod.Select(stub => stub.FindFailure(request.BodyAsBytes))
+                                  .FirstOrDefault(exception => exception is not null);
+
             return $"No stub matched the gRPC call '{method}': the request did not satisfy the {ofMethod.Count} " +
-                   "stub(s) of this method." + (message is null ? "" : $" Request: {Shorten(message)}");
+                   "stub(s) of this method." +
+                   (failure is null
+                       ? ""
+                       : $" The condition of a stub threw {failure.GetType().Name}: {Shorten(failure.Message)}") +
+                   (message is null ? "" : $" Request: {Shorten(message)}");
         }
 
         var methods = stubs.Select(stub => stub.Method!).Distinct().Order().ToList();
@@ -56,6 +63,6 @@ internal static class GrpcUnmatchedCalls
               $"Stubbed methods: {string.Join(", ", methods)}.";
     }
 
-    private static string Shorten(string text) =>
+    internal static string Shorten(string text) =>
         text.Length <= MaxRequestLength ? text : text[..MaxRequestLength] + "...";
 }

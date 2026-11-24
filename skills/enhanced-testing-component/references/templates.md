@@ -163,11 +163,11 @@ For a named endpoint, such as `http://_api.payments`, also set `EndpointName = "
 
 ## External gRPC service
 
-Use a separate `WireMockHarness` with `UseHttp2 = true`; it does not answer HTTP/1.1 requests. Describe the call
-and the answer with the generated types, so the `.proto` text and `WireMock.Net.ProtoBuf` are not needed.
+Pass the descriptors of the services from the generated code. The harness listens over HTTP/2 and does not answer
+HTTP/1.1 requests, so keep it apart from the harness for HTTP APIs.
 
 ```csharp
-public WireMockHarness Payments { get; } = new() { ServiceName = "payments", UseHttp2 = true };
+public WireMockGrpcHarness Payments { get; } = new(PaymentService.Descriptor) { ServiceName = "payments" };
 ```
 
 Point the application's gRPC client at `http://payments`, or pass the address through `ConfigurationKey`.
@@ -175,23 +175,28 @@ Point the application's gRPC client at `http://payments`, or pass the address th
 ```csharp
 var orderId = Guid.NewGuid().ToString();
 
-fixture.Payments.Server
-       .Given(Request.Create()
-                     .UsingGrpc(PaymentService.Descriptor, nameof(PaymentService.PaymentServiceClient.ChargeAsync))
-                     .WithGrpcMessage<ChargeRequest>(request => request.OrderId == orderId))
-       .RespondWith(Response.Create().WithGrpcMessage(new ChargeReply { Status = "charged" }));
+fixture.Payments.On<ChargeRequest>(request => request.OrderId == orderId)
+       .Respond(new ChargeReply { Status = "charged" });
 
 await fixture.Http.CreateClient().PostAsJsonAsync($"/orders/{orderId}/pay", new { Amount = 10 });
+
+Assert.Single(fixture.Payments.On<ChargeRequest>(request => request.OrderId == orderId).Requests());
 ```
 
-- Leave `WithGrpcMessage<TRequest>(...)` out to answer every call of the method.
-- To fail the call, respond with `WithGrpcStatus(StatusCode.Unavailable, "Try later")`. Error details of a rich
-  status go after the message: `WithGrpcStatus(code, message, new ErrorInfo { Reason = "..." })`;
-  `WithGrpcTrailer(key, value)` adds a trailer.
-- Stub by an id of the test's own, as above, when tests share the harness.
+- `On<TRequest>()` without a predicate selects every call of the method. A stub with a predicate answers before one
+  without, so the fixture can set defaults and a test can stub by an id of its own.
+- `Fail(StatusCode.Unavailable, "Try later")` instead of `Respond` fails the call; error details of a rich status
+  go after the message: `Fail(code, message, new ErrorInfo { Reason = "..." })`.
+- `Respond` and `Fail` return the stub; dispose it to remove a stub that overrides a default for one test.
+- If several methods take the same request type, name the method or the service: `On<ChargeRequest>("Refund")`,
+  `On<ChargeRequest>(PaymentService.Descriptor)`.
+- When the application calls the service later (after it consumed a message), wait for the call:
+  `await fixture.Payments.On<ChargeRequest>(r => r.OrderId == orderId).WaitForRequestAsync(TimeSpan.FromSeconds(10))`.
 - A call that no stub matches fails in the app with `Unimplemented`, and the status message shows the request and
   tells whether the method has stubs.
-- Unary methods only.
+- Unary methods only. For delays, scenarios and trailers, stub through `Payments.Server` with WireMock's builders:
+  `Request.Create().UsingGrpc(PaymentService.Descriptor, nameof(PaymentService.PaymentServiceClient.ChargeAsync))`
+  and `Response.Create().WithGrpcMessage(reply)`, `WithGrpcStatus(...)`, `WithGrpcTrailer(key, value)`.
 
 ## Time
 

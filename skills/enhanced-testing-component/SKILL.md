@@ -23,16 +23,16 @@ connection strings into the app's configuration, and stops and removes everythin
 | Kafka or Redpanda | `Enhanced.Testing.Component.Kafka` | `KafkaHarness`, `RedpandaHarness`, `KafkaProducerHarness<K,V>`, `KafkaConsumerHarness<K,V>` |
 | Redis or Redis Stack | `Enhanced.Testing.Component.Redis` | `RedisHarness`, `RedisStackHarness`, `RedisDatabaseHarness` |
 | External HTTP APIs | `Enhanced.Testing.Component.WireMock` | `WireMockHarness` |
-| External gRPC services | `Enhanced.Testing.Component.WireMock` | `WireMockHarness` with `UseHttp2 = true` |
+| External gRPC services | `Enhanced.Testing.Component.WireMock` | `WireMockGrpcHarness` |
 | `TimeProvider` (delays, timeouts, retries, timers) | `Enhanced.Testing.Component.Time` | `TimeProviderHarness` |
 
 All packages target .NET 8–11. Container harnesses need Docker; the others don't.
 
-This skill describes version 1.6 and later. Earlier versions lack several APIs used here: gRPC stubs, `UseHttp2`
-and `ServiceName` of `WireMockHarness` before 1.6; `ReadToEndAsync` and `WaitForAssignmentAsync` before 1.5; the
-Time and WireMock packages, `WaitForKeyAsync`/`WaitForMessageAsync`, topics per test and template databases before
-1.4. If the project references an older version, suggest upgrading or check the API in the installed package's XML
-documentation.
+This skill describes version 1.6 and later. Earlier versions lack several APIs used here: `WireMockGrpcHarness`
+before 1.7; gRPC stubs, `UseHttp2` and `ServiceName` of `WireMockHarness` before 1.6; `ReadToEndAsync` and
+`WaitForAssignmentAsync` before 1.5; the Time and WireMock packages, `WaitForKeyAsync`/`WaitForMessageAsync`, topics
+per test and template databases before 1.4. If the project references an older version, suggest upgrading or check
+the API in the installed package's XML documentation.
 
 ## Set up a test project
 
@@ -116,10 +116,10 @@ More templates (Kafka, Redis, external HTTP and gRPC services, time, gRPC): [ref
 - **Control time instead of waiting.** If the app waits on timeouts, retries or timers, inject `TimeProvider` in the
   app and use `TimeProviderHarness` + `Advance(...)` in tests.
 - **Fake external HTTP APIs** with `WireMockHarness`; call `Reset()` between tests that share it.
-- **Fake external gRPC services** with a `WireMockHarness` that has `UseHttp2 = true`, instead of mocking the
-  generated client inside the application: describe the call with `UsingGrpc(...)` and the answer with
-  `WithGrpcMessage(...)` or `WithGrpcStatus(...)`. Such a harness does not answer HTTP/1.1, so use a separate one
-  for HTTP APIs.
+- **Fake external gRPC services** with `WireMockGrpcHarness`, instead of mocking the generated client inside the
+  application: `backend.On<HelloRequest>(r => r.Name == name).Respond(reply)`. Assert on what the application sent
+  with `.Requests()`, and wait for a later call with `.WaitForRequestAsync(timeout)`. It does not answer HTTP/1.1,
+  so use a separate `WireMockHarness` for HTTP APIs.
 - **Remove background work the test doesn't need** with `ComponentBuilder.Create<Program>().RemoveHostedService<T>()`.
 - **Don't rely on a fresh application.** Tests share the app and everything registered in it: use unique ids per
   test, reset mocks and `WireMockHarness` before a test that configures or counts calls, and never assume an empty
